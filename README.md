@@ -1,8 +1,8 @@
 InformalFF
 ==============================
 [//]: # (Badges)
-[![GitHub Actions Build Status](https://github.com/REPLACE_WITH_OWNER_ACCOUNT/informalff/workflows/CI/badge.svg)](https://github.com/REPLACE_WITH_OWNER_ACCOUNT/informalff/actions?query=workflow%3ACI)
-[![codecov](https://codecov.io/gh/REPLACE_WITH_OWNER_ACCOUNT/InformalFF/branch/main/graph/badge.svg)](https://codecov.io/gh/REPLACE_WITH_OWNER_ACCOUNT/InformalFF/branch/main)
+[![GitHub Actions Build Status](https://github.com/zronyj/informalff/workflows/CI/badge.svg)](https://github.com/zronyj/informalff/actions?query=workflow%3ACI)
+[![codecov](https://codecov.io/gh/zronyj/InformalFF/branch/main/graph/badge.svg)](https://codecov.io/gh/zronyj/InformalFF/branch/main)
 
 
 Attempt at creating an automated molecular force field creator from QM calculations.
