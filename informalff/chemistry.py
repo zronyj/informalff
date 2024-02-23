@@ -112,6 +112,19 @@ class Atom(object):
         """
         return self.coords
 
+    def move_atom(self, vx, vy, vz):
+        """ Method to move the Atom's coordinates
+        
+        Parameters
+        ----------
+        vx : float
+            The motion vector's X coordinate
+        vy : float
+            The motion vector's Y coordinate
+        vz : float
+            The motion vector's Z coordinate
+        """
+        self.coords += np.array([vx, vy, vz])
 
 # ------------------------------------------------------- #
 #                   The Molecule Class                    #
@@ -366,7 +379,7 @@ class Molecule(object):
         d2 /= np.linalg.norm(d2)
 
         # Compute the angle
-        angle = np.arctan2(d2[1], d2[0]) - np.arctan2(d1[1], d1[0])
+        angle = np.arccos( np.dot(d1,d2) )
 
         # In degrees
         angle *= 180/np.pi
@@ -432,7 +445,7 @@ class Molecule(object):
         dihedral = np.arctan2(num, denom)
 
         # In degrees
-        dihedral *= -180/np.pi
+        dihedral *= 180/np.pi
 
         return dihedral
 
@@ -1035,9 +1048,9 @@ class Cluster(object):
 
         Returns
         -------
-        sub_c : Cluster
-            A Cluster object with all the molecules within the
-            provided dimensions.
+        bool : 
+            Returns true if the molecule is in the given
+            coordinates, and false if not.
         """
 
         # Initialize the atom count

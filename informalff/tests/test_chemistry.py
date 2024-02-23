@@ -29,7 +29,8 @@ def test_atom_create():
     he1 = informalff.Atom(element="He")
     he2 = informalff.Atom(element="He")
     he1.set_coordinates(1.0, 0.0, 0.0)
-    he2.set_coordinates(-1.0, 0.0, 0.0)
+    he2.set_coordinates(0.0, 0.0, 0.0)
+    he2.move_atom(-1.0, 0.0, 0.0)
 
     assert sum(he1.get_coordinates() + he2.get_coordinates()) == 0.0
 
@@ -64,6 +65,31 @@ def test_molecule_geometric_center():
     mol1.add_atoms(h1, h2)
 
     assert sum(mol1.get_center()) == 0.5
+
+def test_molecule_bond_distance(methane_molecule):
+
+    mol1, atoms1 = methane_molecule
+
+    bond = mol1.get_distance(0, 3)
+
+    assert pytest.approx(bond, 1e-3) == 1.089
+
+
+def test_molecule_angle(methane_molecule):
+
+    mol1, atoms1 = methane_molecule
+
+    angle = mol1.get_angle(1,0,2)
+
+    assert pytest.approx(angle, 1e-2) == 109.47
+
+def test_molecule_dihedral(methane_molecule):
+
+    mol1, atoms1 = methane_molecule
+
+    dihedral = mol1.get_dihedral(2,0,1,3)
+
+    assert pytest.approx(dihedral, 1e-2) == 120
 
 def test_molecule_center_atom(methane_molecule):
 
@@ -111,3 +137,4 @@ def test_molecule_save_load_xyz(methane_molecule):
     os.remove(f"{mol1.name}.xyz")
 
     assert atomsX and weight and center
+
