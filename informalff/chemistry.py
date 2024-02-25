@@ -1,10 +1,11 @@
 import os                # To navigate the file system
 import copy              # To copy objects
-import requests          # To get data from the web
 import warnings          # To throw warnings instead of raising errors
 import numpy as np       # To do basic scientific computing
 import pandas as pd      # To manage tables and databases
 from pathlib import Path # To locate files in the file system
+# To be able to construct rotation matrices
+from scipy.spatial.transform import Rotation as R
 
 
 # ------------------------------------------------------- #
@@ -277,7 +278,7 @@ class Molecule(object):
             todos.append([a.element, x, y, z])
         return todos
 
-    def get_atoms(self):
+    def get_num_atoms(self):
         """ Method to get the number of atoms in the molecule
 
         Returns
@@ -315,6 +316,87 @@ class Molecule(object):
             a.set_coordinates(  x=new_coords[0],
                                 y=new_coords[1],
                                 z=new_coords[2])
+
+        return True
+    
+    def move_selected_atoms(self, direction):
+        """ Method to move some atoms of the molecule
+
+        Moves some atom of the molecule in a given direction.
+
+        Parameters
+        ----------
+        directions : ndarray
+            A NumPy array with the X, Y, Z coordinates of the motion
+            vector, to be added to each atom to move the molecule.
+
+        Returns
+        -------
+        bool
+            True if everything works out.
+        """
+
+        # Iterate over all atoms in the molecule ...
+        for a in self.atoms:
+            if a.flag:
+                # Extract the atomic coordinates
+                position = a.get_coordinates()
+                # Compute the new coordinates
+                new_coords = position + direction
+                # Set the new coordinates
+                a.set_coordinates(  x=new_coords[0],
+                                    y=new_coords[1],
+                                    z=new_coords[2])
+
+        return True
+
+    def rotate_molecule_over_angles(self, euler_angles, center="geom"):
+        """ Method to rotate the molecule
+
+        Rotates the molecule according to its Euler angles
+
+        Parameters
+        ----------
+        euler_angles : ndarray
+            A NumPy array with the X, Y, Z Euler angles (in degrees)
+            for the rotation of the molecule. Keep in mind that the
+            molecule has to be taken to the origin to make these
+            rotations.
+        center : str
+            Specify which center of the molecule to use:
+            - com  : center of mass
+            - atom : atom closest to the center of mass
+            - geom : geometric center (coordinates)
+
+        Returns
+        -------
+        bool
+            True if everything works out.
+        """
+
+        if center == "com":
+            mol_center = self.get_center_of_mass()
+        elif center == "atom":
+            mol_center = self.get_center_atom()[2]
+        else:
+            mol_center = self.get_center()
+
+        self.move_molecule(-1 * mol_center)
+
+        r = R.from_euler('xyz', euler_angles.tolist(), degrees=True)
+
+        # Iterate over all atoms in the molecule ...
+        for a in self.atoms:
+            # Extract the atomic coordinates
+            position = a.get_coordinates()
+            # Compute the new coordinates
+            new_coords = r.as_matrix() @ position
+            # Set the new coordinates
+            a.set_coordinates(  x=new_coords[0],
+                                y=new_coords[1],
+                                z=new_coords[2])
+        
+        self.move_molecule(mol_center)
 
         return True
 
@@ -748,7 +830,7 @@ class Cluster(object):
 
         # Increment the number of molecules and atoms
         self.__nmols += 1
-        self.__natoms += mol.get_atoms()
+        self.__natoms += mol.get_num_atoms()
 
         return True
 

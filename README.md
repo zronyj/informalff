@@ -5,7 +5,7 @@ InformalFF
 [![codecov](https://codecov.io/gh/zronyj/InformalFF/branch/main/graph/badge.svg)](https://codecov.io/gh/zronyj/InformalFF/branch/main)
 
 
-Attempt at creating an automated molecular force field creator from QM calculations.
+Attempt at making an automated molecular force field creator from QM calculations.
 
 ### Copyright
 

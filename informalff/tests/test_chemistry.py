@@ -112,6 +112,40 @@ def test_molecule_move_molecule(methane_molecule):
 
     assert sum(mol1.get_center_of_mass()) == 1.5
 
+def test_molecule_selected_atoms(methane_molecule):
+
+    mol1, atoms1 = methane_molecule
+
+    mol1.atoms[1].flag = True
+
+    mol1.move_selected_atoms(np.array([0, 0, 1.0]))
+
+    mol1.atoms[1].flag = False
+
+    second_atom = np.array(mol1.get_coords()[1][1:])
+
+    x = pytest.approx(second_atom[0],1) == 0.0
+    y = pytest.approx(second_atom[1],1) == 0.0
+    z = pytest.approx(second_atom[2],3) == 2.089
+
+    assert x and y and z
+
+def test_molecule_rotate_molecule_over_angles(methane_molecule):
+
+    mol1, atoms1 = methane_molecule
+
+    mol1.move_molecule(np.array([5.0, 0, 0]))
+
+    mol1.rotate_molecule_over_angles(np.array([-90,0,0]))
+
+    second_atom = np.array(mol1.get_coords()[1][1:])
+
+    x = pytest.approx(second_atom[0],1) == 5.0
+    y = pytest.approx(second_atom[1],3) == 1.089
+    z = pytest.approx(second_atom[2],1) == 0.0
+
+    assert x and y and z
+
 def test_molecule_mol_weight(methane_molecule):
 
     mol1, atoms1 = methane_molecule
