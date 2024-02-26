@@ -130,19 +130,49 @@ def test_molecule_selected_atoms(methane_molecule):
 
     assert x and y and z
 
-def test_molecule_rotate_molecule_over_angles(methane_molecule):
+def test_molecule_rotate_molecule_over_center(methane_molecule):
 
     mol1, atoms1 = methane_molecule
 
     mol1.move_molecule(np.array([5.0, 0, 0]))
 
-    mol1.rotate_molecule_over_angles(np.array([-90,0,0]))
+    mol1.rotate_molecule_over_center(np.array([-90,0,0]))
 
     second_atom = np.array(mol1.get_coords()[1][1:])
 
     x = pytest.approx(second_atom[0],1) == 5.0
     y = pytest.approx(second_atom[1],3) == 1.089
     z = pytest.approx(second_atom[2],1) == 0.0
+
+    assert x and y and z
+
+def test_molecule_rotate_molecule_over_atom(methane_molecule):
+
+    mol1, atoms1 = methane_molecule
+
+    mol1.rotate_molecule_over_atom(np.array([0,90,0]), 1)
+
+    first_atom = np.array(mol1.get_coords()[0][1:])
+
+    x = pytest.approx(first_atom[0],1) == -1.089
+    y = pytest.approx(first_atom[1],3) == 0.0
+    z = pytest.approx(first_atom[2],3) == 1.089
+
+    assert x and y and z
+
+def test_molecule_rotate_molecule_over_bond(methane_molecule):
+
+    mol1, atoms1 = methane_molecule
+
+    mol1.move_molecule(np.array([1.02672, 0, 0.36300]))
+
+    mol1.rotate_molecule_over_bond(0, 1, 60)
+
+    fourth_atom = np.array(mol1.get_coords()[3][1:])
+
+    x = pytest.approx(fourth_atom[0],1) == 0.0
+    y = pytest.approx(fourth_atom[1],1) == 0.0
+    z = pytest.approx(fourth_atom[2],1) == 0.0
 
     assert x and y and z
 

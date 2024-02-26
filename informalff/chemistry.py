@@ -63,8 +63,8 @@ class Atom(object):
         if element in all_symbols:
             self.element = element
         else:
-            raise TypeError((f"The symbol {element} does not correspond "
-                "to any element in the Periodic Table."))
+            raise TypeError((f"Atom.__init__() The symbol {element} does not "
+                "correspond to any element in the Periodic Table."))
 
         self.coords = np.array([x,y,z])
         self.flag = flag
@@ -219,7 +219,7 @@ class Molecule(object):
 
         # Check if the provided list is empty
         if len(atoms) == 0:
-            raise TypeError("Molecule: The added object is empty.")
+            raise TypeError("Molecule.add_atoms() The added object is empty.")
 
         # If the provided list has only one element
         elif len(atoms) == 1:
@@ -231,8 +231,8 @@ class Molecule(object):
         for a in atoms:
             # Check that the object is actually an Atom instance
             if not isinstance(a, Atom):
-                raise TypeError(("Molecule: The added object is not an "
-                                "instance of Atom."))
+                raise TypeError(("Molecule.add_atoms() The added object is "
+                                "not an instance of Atom."))
         
         # Iterate over all the provided atoms
         for a in atoms:
@@ -350,8 +350,8 @@ class Molecule(object):
 
         return True
 
-    def rotate_molecule_over_angles(self, euler_angles, center="geom"):
-        """ Method to rotate the molecule
+    def rotate_molecule_over_center(self, euler_angles, center="geom"):
+        """ Method to rotate the molecule around its center
 
         Rotates the molecule according to its Euler angles
 
@@ -383,6 +383,7 @@ class Molecule(object):
 
         self.move_molecule(-1 * mol_center)
 
+        # Create rotation operator
         r = R.from_euler('xyz', euler_angles.tolist(), degrees=True)
 
         # Iterate over all atoms in the molecule ...
@@ -397,6 +398,253 @@ class Molecule(object):
                                 z=new_coords[2])
         
         self.move_molecule(mol_center)
+
+        return True
+    
+    def rotate_selected_atoms_over_center(self, euler_angles, center="geom"):
+        """ Method to rotate some atoms over their center
+
+        Rotates some atoms according to its Euler angles
+
+        Parameters
+        ----------
+        euler_angles : ndarray
+            A NumPy array with the X, Y, Z Euler angles (in degrees)
+            for the rotation of the selected atoms. Keep in mind that
+            the selected atoms have to be taken to the origin to make
+            these rotations.
+        center : str
+            Specify which center of the molecule to use:
+            - com  : center of mass
+            - atom : atom closest to the center of mass
+            - geom : geometric center (coordinates)
+
+        Returns
+        -------
+        bool
+            True if everything works out.
+        """
+
+        temp_mol = Molecule("__temporary_molecule__")
+        for a in self.atoms:
+            if a.flag:
+                temp_mol.add_atoms(a)
+
+        if center == "com":
+            mol_center = temp_mol.get_center_of_mass()
+        elif center == "atom":
+            mol_center = temp_mol.get_center_atom()[2]
+        else:
+            mol_center = temp_mol.get_center()
+
+        self.move_molecule(-1 * mol_center)
+
+        # Create rotation operator
+        r = R.from_euler('xyz', euler_angles.tolist(), degrees=True)
+
+        # Iterate over all atoms in the molecule ...
+        for a in self.atoms:
+            # Extract the atomic coordinates
+            position = a.get_coordinates()
+            # Compute the new coordinates
+            new_coords = r.as_matrix() @ position
+            # Set the new coordinates
+            a.set_coordinates(  x=new_coords[0],
+                                y=new_coords[1],
+                                z=new_coords[2])
+        
+        self.move_molecule(mol_center)
+
+        return True
+    
+    def rotate_molecule_over_atom(self, euler_angles, atom):
+        """ Method to rotate the molecule around an atom
+
+        Rotates the molecule according to its Euler angles over an atom
+
+        Parameters
+        ----------
+        euler_angles : ndarray
+            A NumPy array with the X, Y, Z Euler angles (in degrees)
+            for the rotation of the molecule. Keep in mind that the
+            molecule has to be taken to the origin to make these
+            rotations.
+        atom : int
+            The number of atom to be used as rotation point.
+
+        Returns
+        -------
+        bool
+            True if everything works out.
+        """
+
+        rotation_point = np.array(self.get_coords()[atom][1:])
+
+        self.move_molecule(-1 * rotation_point)
+
+        # Create rotation operator
+        r = R.from_euler('xyz', euler_angles.tolist(), degrees=True)
+
+        # Iterate over all atoms in the molecule ...
+        for a in self.atoms:
+            # Extract the atomic coordinates
+            position = a.get_coordinates()
+            # Compute the new coordinates
+            new_coords = r.as_matrix() @ position
+            # Set the new coordinates
+            a.set_coordinates(  x=new_coords[0],
+                                y=new_coords[1],
+                                z=new_coords[2])
+        
+        self.move_molecule(rotation_point)
+
+        return True
+    
+    def rotate_selected_atoms_over_atom(self, euler_angles, atom):
+        """ Method to rotate some atoms around an atom
+
+        Rotates the selected atoms according to the Euler angles
+        over an atom
+
+        Parameters
+        ----------
+        euler_angles : ndarray
+            A NumPy array with the X, Y, Z Euler angles (in degrees)
+            for the rotation of the selected atoms. Keep in mind that
+            the selected atoms have to be taken to the origin to make
+            these rotations.
+        atom : int
+            The number of atom to be used as rotation point.
+
+        Returns
+        -------
+        bool
+            True if everything works out.
+        """
+
+        # Sanity check
+        for i, a in enumerate(self.atoms):
+            if i == atom and a.flag:
+                raise ValueError("Molecule.rotate_selected_atoms_over_atom()"
+                                 " The selected atom should not be one of"
+                                 " the rotated atoms!")
+
+        rotation_point = np.array(self.get_coords()[atom][1:])
+
+        self.move_molecule(-1 * rotation_point)
+
+        # Create rotation operator
+        r = R.from_euler('xyz', euler_angles.tolist(), degrees=True)
+
+        # Iterate over all atoms in the molecule ...
+        for a in self.atoms:
+            if a.flag:
+                # Extract the atomic coordinates
+                position = a.get_coordinates()
+                # Compute the new coordinates
+                new_coords = r.as_matrix() @ position
+                # Set the new coordinates
+                a.set_coordinates(  x=new_coords[0],
+                                    y=new_coords[1],
+                                    z=new_coords[2])
+        
+        self.move_molecule(rotation_point)
+
+        return True
+    
+    def rotate_molecule_over_bond(self, atom1, atom2, angle):
+        """ Method to rotate the molecule around a bond
+
+        Rotates the molecule over a specific bond
+
+        Parameters
+        ----------
+        atom1 : int
+            The atom working as the source of the rotation vector.
+        atom2 : int
+            The atom working as the end of the rotation vector.
+        angle : float
+            The angle of rotation (in degrees).
+
+        Returns
+        -------
+        bool
+            True if everything works out.
+        """
+
+        # Get coordinates for the tip and tail of the arrow
+        tail_point = np.array(self.get_coords()[atom1][1:])
+        tip_point = np.array(self.get_coords()[atom2][1:])
+
+        # Create the rotation vector (orthogonal to rotation)
+        rotation_vector = tip_point - tail_point
+        rotation_vector /= np.linalg.norm(rotation_vector)
+
+        # Create rotation operator
+        r = R.from_rotvec(angle * rotation_vector, degrees=True)
+
+        # Iterate over all atoms in the molecule ...
+        for a in self.atoms:
+            # Extract the atomic coordinates
+            position = a.get_coordinates()
+            # Compute the new coordinates
+            new_coords = r.as_matrix() @ position
+            # Set the new coordinates
+            a.set_coordinates(  x=new_coords[0],
+                                y=new_coords[1],
+                                z=new_coords[2])
+
+        return True
+    
+    def rotate_selected_atoms_over_bond(self, atom1, atom2, angle):
+        """ Method to rotate selected atoms over a bond
+
+        Rotates selected atoms over a specific bond
+
+        Parameters
+        ----------
+        atom1 : int
+            The atom working as the source of the rotation vector.
+        atom2 : int
+            The atom working as the end of the rotation vector.
+        angle : float
+            The angle of rotation (in degrees).
+
+        Returns
+        -------
+        bool
+            True if everything works out.
+        """
+
+        # Sanity check
+        for i, a in enumerate(self.atoms):
+            if ((i == atom1) or (i == atom2)) and a.flag:
+                raise ValueError("Molecule.rotate_selected_atoms_over_bond()"
+                                 " The selected atom should not be one of"
+                                 " the rotated atoms!")
+
+        # Get coordinates for the tip and tail of the arrow
+        tail_point = np.array(self.get_coords()[atom1][1:])
+        tip_point = np.array(self.get_coords()[atom2][1:])
+
+        # Create the rotation vector (orthogonal to rotation)
+        rotation_vector = tip_point - tail_point
+        rotation_vector /= np.linalg.norm(rotation_vector)
+
+        # Create rotation operator
+        r = R.from_rotvec(angle * rotation_vector, degrees=True)
+
+        # Iterate over all atoms in the molecule ...
+        for a in self.atoms:
+            if a.flag:
+                # Extract the atomic coordinates
+                position = a.get_coordinates()
+                # Compute the new coordinates
+                new_coords = r.as_matrix() @ position
+                # Set the new coordinates
+                a.set_coordinates(  x=new_coords[0],
+                                    y=new_coords[1],
+                                    z=new_coords[2])
 
         return True
 
@@ -822,8 +1070,8 @@ class Cluster(object):
 
         # Check that the object is actually an Molecule instance
         if not isinstance(mol, Molecule):
-            raise TypeError(("Cluster: The added object is not an instance "
-                            "of Molecule."))
+            raise TypeError(("Cluster.add_molecule() The added object is not "
+                            "an instance of Molecule."))
         
         # Add mols to the molecule
         self.molecules[idm] = mol
