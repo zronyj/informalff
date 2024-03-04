@@ -4,9 +4,11 @@ import warnings          # To throw warnings instead of raising errors
 import numpy as np       # To do basic scientific computing
 import pandas as pd      # To manage tables and databases
 from pathlib import Path # To locate files in the file system
+import scipy.constants as cts # Universal constants
 # To be able to construct rotation matrices
 from scipy.spatial.transform import Rotation as R
 
+# bohr = 1 / (cts.physical_constants["Bohr radius"][0] * 1e10)
 
 # ------------------------------------------------------- #
 #              Setting up the Periodic Table              #
@@ -41,8 +43,13 @@ class Atom(object):
         A flag to denote if the atom has been selected or not
     """
 
-    def __init__(self, element="H", x=0.0, y=0.0, z=0.0,
-                 flag=False):
+    def __init__(self,
+                 element:str = "H",
+                 x : int = 0.0,
+                 y : int = 0.0,
+                 z : int = 0.0,
+                 charge : float = 0.0,
+                 flag : bool = False):
         """ Atom constructor method
 
         This is the method to construct the Atom object
@@ -57,6 +64,8 @@ class Atom(object):
             The atom's Y coordinate
         z : float
             The atom's Z coordinate
+        charge : float
+            The atom's charge
         flag : bool
             A flag to denote if the atom has been selected or not
         """
@@ -67,9 +76,10 @@ class Atom(object):
                 "correspond to any element in the Periodic Table."))
 
         self.coords = np.array([x,y,z])
+        self.charge = charge
         self.flag = flag
 
-    def __repr__(self):
+    def __repr__(self) -> str:
         """ Atom representation method
 
         This method builds a string with the information
@@ -82,13 +92,16 @@ class Atom(object):
                 The atom's element symbol, its coordinates
                 and its flag
         """
-
         text = (f" {self.element} {self.coords[0]:16.8f} "
                 f"{self.coords[1]:16.8f} {self.coords[2]:16.8f}"
-                f" {'*' if self.flag else ' '}")
+                f" q(+/-) {self.charge:16.8f} "
+                f" [{'*' if self.flag else ' '}]")
         return text
 
-    def set_coordinates(self, x, y, z):
+    def set_coordinates(self,
+                        x : float,
+                        y : float,
+                        z : float):
         """ Method to update the Atom's coordinates
         
         Parameters
@@ -100,10 +113,9 @@ class Atom(object):
         z : float
             The atom's Z coordinate
         """
-
         self.coords = np.array([x, y, z])
 
-    def get_coordinates(self):
+    def get_coordinates(self) -> np.ndarray:
         """ Method to get the Atom's coordinates
     
         Returns
@@ -113,7 +125,10 @@ class Atom(object):
         """
         return self.coords
 
-    def move_atom(self, vx, vy, vz):
+    def move_atom(self,
+                  vx : float,
+                  vy : float,
+                  vz : float):
         """ Method to move the Atom's coordinates
         
         Parameters
@@ -155,7 +170,7 @@ class Molecule(object):
         The molecular charge
     """
 
-    def __init__(self, name):
+    def __init__(self, name : str):
         """ Molecule constructor method
 
         This is the method to construct the Molecule object
@@ -170,7 +185,7 @@ class Molecule(object):
         self.mol_weight = 0.0
         self.charge = 0.0
 
-    def __repr__(self):
+    def __repr__(self) -> str:
         """ Method to represent a molecule
 
         This method builds a string with the information
@@ -183,16 +198,16 @@ class Molecule(object):
                 The atom's element symbol, its coordinates
                 and its flag
         """
-
         # Show the number of atoms in the molecule
         temp = f"Atoms[{len(self.atoms)}] for {self.name}\n"
 
         # Add the information of every atom to the final string
         for i, a in enumerate(self.atoms):
             temp += f"{i:>4} {str(a)}\n"
+
         return temp
 
-    def add_atoms(self, *atoms):
+    def add_atoms(self, *atoms : Atom):
         """ Method to add atoms to the molecule
 
         Adds the specified atom(s) to the Molecule object. It
@@ -210,13 +225,7 @@ class Molecule(object):
         *atoms
             A `list` with all the Atom objects to be added to the
             Molecule object.
-
-        Returns
-        -------
-        bool
-            True if everything works out.
         """
-
         # Check if the provided list is empty
         if len(atoms) == 0:
             raise TypeError("Molecule.add_atoms() The added object is empty.")
@@ -241,8 +250,30 @@ class Molecule(object):
 
         # Compute the molecular weight of the molecule
         self.get_mol_weight()
+    
+    def assign_charges(self, *charges : float):
+        """ Method to assign charges to each atom in the molecule
 
-        return True
+        Raises
+        ------
+        ValueError
+            If the number of charges is not the same as the number of
+            atoms in the molecule.
+
+        Parameters
+        ----------
+        *charges
+            A `list` of floats with all the charges for the atoms.
+        """
+        # Sanity check
+        if len(charges) != self.get_num_atoms():
+            raise ValueError("Molecule.assign_charges() The number of charges"
+                             " is not the same as the number of atoms in the "
+                             "molecule!")
+        
+        # Assign the respective charges
+        for c, a in enumerate(self.atoms):
+            a.charge = charges[c]
 
     def get_mol_weight(self):
         """ Method to get the Molecule's mass
@@ -255,14 +286,14 @@ class Molecule(object):
         bool
             True if the molecular mass has been computed.
         """
-
         self.mol_weight = 0.0
         for a in self.atoms:
             symbol = a.element
             self.mol_weight += PERIODIC_TABLE.loc[symbol, "AtomicMass"]
+
         return True
 
-    def get_coords(self):
+    def get_coords(self) -> list:
         """ Method to get the molecule's coordinates
 
         Returns
@@ -271,14 +302,15 @@ class Molecule(object):
             A list with the atoms represented by lists with
             the symbol and X, Y, Z coordinates.
         """
-
         todos = []
+
         for a in self.atoms:
             x, y, z = a.get_coordinates()
-            todos.append([a.element, x, y, z])
+            todos.append([a.element, x, y, z, a.charge])
+
         return todos
 
-    def get_num_atoms(self):
+    def get_num_atoms(self) -> int:
         """ Method to get the number of atoms in the molecule
 
         Returns
@@ -286,10 +318,9 @@ class Molecule(object):
         int
             Number of atoms in the molecule.
         """
-
         return len(self.atoms)
 
-    def move_molecule(self, direction):
+    def move_molecule(self, direction : np.ndarray):
         """ Method to move the molecule
 
         Moves each atom of the molecule in a given direction.
@@ -299,13 +330,7 @@ class Molecule(object):
         directions : ndarray
             A NumPy array with the X, Y, Z coordinates of the motion
             vector, to be added to each atom to move the molecule.
-
-        Returns
-        -------
-        bool
-            True if everything works out.
         """
-
         # Iterate over all atoms in the molecule ...
         for a in self.atoms:
             # Extract the atomic coordinates
@@ -316,10 +341,8 @@ class Molecule(object):
             a.set_coordinates(  x=new_coords[0],
                                 y=new_coords[1],
                                 z=new_coords[2])
-
-        return True
     
-    def move_selected_atoms(self, direction):
+    def move_selected_atoms(self, direction : np.ndarray):
         """ Method to move some atoms of the molecule
 
         Moves some atom of the molecule in a given direction.
@@ -329,13 +352,7 @@ class Molecule(object):
         directions : ndarray
             A NumPy array with the X, Y, Z coordinates of the motion
             vector, to be added to each atom to move the molecule.
-
-        Returns
-        -------
-        bool
-            True if everything works out.
         """
-
         # Iterate over all atoms in the molecule ...
         for a in self.atoms:
             if a.flag:
@@ -348,9 +365,9 @@ class Molecule(object):
                                     y=new_coords[1],
                                     z=new_coords[2])
 
-        return True
-
-    def rotate_molecule_over_center(self, euler_angles, center="geom"):
+    def rotate_molecule_over_center(self,
+                                    euler_angles : np.ndarray,
+                                    center : str = "geom"):
         """ Method to rotate the molecule around its center
 
         Rotates the molecule according to its Euler angles
@@ -367,13 +384,7 @@ class Molecule(object):
             - com  : center of mass
             - atom : atom closest to the center of mass
             - geom : geometric center (coordinates)
-
-        Returns
-        -------
-        bool
-            True if everything works out.
         """
-
         if center == "com":
             mol_center = self.get_center_of_mass()
         elif center == "atom":
@@ -398,10 +409,10 @@ class Molecule(object):
                                 z=new_coords[2])
         
         self.move_molecule(mol_center)
-
-        return True
     
-    def rotate_selected_atoms_over_center(self, euler_angles, center="geom"):
+    def rotate_selected_atoms_over_center(self,
+                                          euler_angles : np.ndarray,
+                                          center : str = "geom"):
         """ Method to rotate some atoms over their center
 
         Rotates some atoms according to its Euler angles
@@ -418,13 +429,7 @@ class Molecule(object):
             - com  : center of mass
             - atom : atom closest to the center of mass
             - geom : geometric center (coordinates)
-
-        Returns
-        -------
-        bool
-            True if everything works out.
         """
-
         temp_mol = Molecule("__temporary_molecule__")
         for a in self.atoms:
             if a.flag:
@@ -454,10 +459,10 @@ class Molecule(object):
                                 z=new_coords[2])
         
         self.move_molecule(mol_center)
-
-        return True
     
-    def rotate_molecule_over_atom(self, euler_angles, atom):
+    def rotate_molecule_over_atom(self,
+                                  euler_angles : np.ndarray,
+                                  atom : int):
         """ Method to rotate the molecule around an atom
 
         Rotates the molecule according to its Euler angles over an atom
@@ -471,14 +476,8 @@ class Molecule(object):
             rotations.
         atom : int
             The number of atom to be used as rotation point.
-
-        Returns
-        -------
-        bool
-            True if everything works out.
         """
-
-        rotation_point = np.array(self.get_coords()[atom][1:])
+        rotation_point = np.array(self.get_coords()[atom][1:4])
 
         self.move_molecule(-1 * rotation_point)
 
@@ -497,14 +496,20 @@ class Molecule(object):
                                 z=new_coords[2])
         
         self.move_molecule(rotation_point)
-
-        return True
     
-    def rotate_selected_atoms_over_atom(self, euler_angles, atom):
+    def rotate_selected_atoms_over_atom(self,
+                                        euler_angles : np.ndarray,
+                                        atom : int):
         """ Method to rotate some atoms around an atom
 
         Rotates the selected atoms according to the Euler angles
         over an atom
+
+        Raises
+        ------
+        ValueError
+            If one of the selected atoms for rotation is selected as
+            pivot for rotation.
 
         Parameters
         ----------
@@ -515,13 +520,7 @@ class Molecule(object):
             these rotations.
         atom : int
             The number of atom to be used as rotation point.
-
-        Returns
-        -------
-        bool
-            True if everything works out.
         """
-
         # Sanity check
         for i, a in enumerate(self.atoms):
             if i == atom and a.flag:
@@ -529,7 +528,7 @@ class Molecule(object):
                                  " The selected atom should not be one of"
                                  " the rotated atoms!")
 
-        rotation_point = np.array(self.get_coords()[atom][1:])
+        rotation_point = np.array(self.get_coords()[atom][1:4])
 
         self.move_molecule(-1 * rotation_point)
 
@@ -549,10 +548,11 @@ class Molecule(object):
                                     z=new_coords[2])
         
         self.move_molecule(rotation_point)
-
-        return True
     
-    def rotate_molecule_over_bond(self, atom1, atom2, angle):
+    def rotate_molecule_over_bond(self,
+                                  atom1 : int,
+                                  atom2 : int,
+                                  angle : float):
         """ Method to rotate the molecule around a bond
 
         Rotates the molecule over a specific bond
@@ -565,16 +565,16 @@ class Molecule(object):
             The atom working as the end of the rotation vector.
         angle : float
             The angle of rotation (in degrees).
-
-        Returns
-        -------
-        bool
-            True if everything works out.
         """
+        # Find the location of the base of the rotation vector
+        base = np.array(self.get_coords()[atom1][1:4])
+
+        # Move the molecule there
+        self.move_molecule(-1 * base)
 
         # Get coordinates for the tip and tail of the arrow
-        tail_point = np.array(self.get_coords()[atom1][1:])
-        tip_point = np.array(self.get_coords()[atom2][1:])
+        tail_point = np.array(self.get_coords()[atom1][1:4])
+        tip_point = np.array(self.get_coords()[atom2][1:4])
 
         # Create the rotation vector (orthogonal to rotation)
         rotation_vector = tip_point - tail_point
@@ -593,13 +593,24 @@ class Molecule(object):
             a.set_coordinates(  x=new_coords[0],
                                 y=new_coords[1],
                                 z=new_coords[2])
-
-        return True
+        
+        
+        # Move the molecule back to its place
+        self.move_molecule(base)
     
-    def rotate_selected_atoms_over_bond(self, atom1, atom2, angle):
+    def rotate_selected_atoms_over_bond(self,
+                                        atom1 : int,
+                                        atom2 : int,
+                                        angle : float):
         """ Method to rotate selected atoms over a bond
 
         Rotates selected atoms over a specific bond
+
+        Raises
+        ------
+        ValueError
+            If one of the selected atoms for rotation is selected as
+            start or end for rotation.
 
         Parameters
         ----------
@@ -609,23 +620,23 @@ class Molecule(object):
             The atom working as the end of the rotation vector.
         angle : float
             The angle of rotation (in degrees).
-
-        Returns
-        -------
-        bool
-            True if everything works out.
         """
-
         # Sanity check
         for i, a in enumerate(self.atoms):
             if ((i == atom1) or (i == atom2)) and a.flag:
                 raise ValueError("Molecule.rotate_selected_atoms_over_bond()"
                                  " The selected atom should not be one of"
                                  " the rotated atoms!")
+        
+        # Find the location of the base of the rotation vector
+        base = np.array(self.get_coords()[atom1][1:4])
+
+        # Move the molecule there
+        self.move_molecule(-1 * base)
 
         # Get coordinates for the tip and tail of the arrow
-        tail_point = np.array(self.get_coords()[atom1][1:])
-        tip_point = np.array(self.get_coords()[atom2][1:])
+        tail_point = np.array(self.get_coords()[atom1][1:4])
+        tip_point = np.array(self.get_coords()[atom2][1:4])
 
         # Create the rotation vector (orthogonal to rotation)
         rotation_vector = tip_point - tail_point
@@ -645,19 +656,20 @@ class Molecule(object):
                 a.set_coordinates(  x=new_coords[0],
                                     y=new_coords[1],
                                     z=new_coords[2])
+        
+        # Move the molecule back to its place
+        self.move_molecule(base)
 
-        return True
-
-    def get_distance(self, a1, a2):
+    def get_distance(self, a1 : int, a2 : int) -> float:
         """ Method to get interatomic distance
 
         Method to get the distance between two atoms
 
         Parameters
         ----------
-        a1 : integer
+        a1 : int
             An integer representing an atom in the molecule.
-        a2 : integer
+        a2 : int
             An integer representing an atom in the molecule.
 
         Returns
@@ -665,7 +677,6 @@ class Molecule(object):
         float
             The value of the distance between both atoms
         """
-
         # Get coordinates of atom 1
         v1 = self.atoms[a1].get_coordinates()
         # Get coordinates of atom 2
@@ -673,18 +684,18 @@ class Molecule(object):
 
         return np.linalg.norm(v2 - v1)
 
-    def get_angle(self, a1, a2, a3):
+    def get_angle(self, a1 : int, a2 : int, a3 : int) -> float:
         """ Method to get interatomic angle
 
         Method to get the angle between three atoms
 
         Parameters
         ----------
-        a1 : integer
+        a1 : int
             An integer representing an edge atom in the molecule.
-        a2 : integer
+        a2 : int
             An integer representing a pivot atom in the molecule.
-        a3 : integer
+        a3 : int
             An integer representing an edge atom in the molecule.
 
         Returns
@@ -692,12 +703,9 @@ class Molecule(object):
         angle : float
             The value of the angle between all 3 atoms
         """
-
-        # Get coordinates of atom 1
+        # Get coordinates
         v1 = self.atoms[a1].get_coordinates()
-        # Get coordinates of atom 2
         v2 = self.atoms[a2].get_coordinates()
-        # Get coordinates of atom 3
         v3 = self.atoms[a3].get_coordinates()
 
         # Obtaining the direction vectors
@@ -716,22 +724,26 @@ class Molecule(object):
 
         return angle
 
-    def get_dihedral(self, a1, a2, a3, a4):
+    def get_dihedral(self,
+                     a1 : int,
+                     a2 : int,
+                     a3 : int,
+                     a4 : int) -> float:
         """ Method to get interatomic angle
 
         Method to get the angle between three atoms
 
         Parameters
         ----------
-        a1 : integer
+        a1 : int
             An integer representing an edge atom in the molecule.
-        a2 : integer
+        a2 : int
             An integer representing an atom in the molecule over
             the axis.
-        a3 : integer
+        a3 : int
             An integer representing an atom in the molecule over
             the axis.
-        a4 : integer
+        a4 : int
             An integer representing an edge atom in the molecule.
 
         Returns
@@ -739,14 +751,10 @@ class Molecule(object):
         float
             The value of the angle between all 4 atoms
         """
-
-        # Get coordinates of atom 1
+        # Get coordinates
         v1 = self.atoms[a1].get_coordinates()
-        # Get coordinates of atom 2
         v2 = self.atoms[a2].get_coordinates()
-        # Get coordinates of atom 3
         v3 = self.atoms[a3].get_coordinates()
-        # Get coordinates of atom 4
         v4 = self.atoms[a4].get_coordinates()
 
         # Obtaining the direction vectors
@@ -779,7 +787,7 @@ class Molecule(object):
 
         return dihedral
 
-    def get_center_of_mass(self):
+    def get_center_of_mass(self) -> np.ndarray:
         """ Method to get the molecule's center of mass
 
         Returns
@@ -788,7 +796,6 @@ class Molecule(object):
             The X, Y, Z coordinates of the center of mass
             of the molecule.
         """
-
         # Get the coordinates of all the atoms
         atoms = self.get_coords()
 
@@ -801,13 +808,13 @@ class Molecule(object):
         # Iterate over all atoms
         for a in atoms:
             # Weight the coordinates by the mass and add them to the center
-            centro += np.array([*a[1:]]) * PERIODIC_TABLE.loc[a[0], "AtomicMass"]
+            centro += np.array([*a[1:4]]) * PERIODIC_TABLE.loc[a[0], "AtomicMass"]
 
         # Divide the center by the molecular mass
         centro *= (1 / M)
         return centro
 
-    def get_center_atom(self):
+    def get_center_atom(self) -> list:
         """ Method to get the molecule's center atom
 
         Compute the atom closest to the center of mass.
@@ -818,7 +825,6 @@ class Molecule(object):
             The number of the atom, its symbol and its distance
             to the center in a list.
         """
-
         # All atom distances relative to the COM
         distances = []
 
@@ -835,7 +841,7 @@ class Molecule(object):
 
         return distances[0]
 
-    def get_center(self):
+    def get_center(self) -> np.ndarray:
         """ Method to get the geometric center of the molecule
 
         Compute the center of the molecule solely as an average
@@ -847,7 +853,6 @@ class Molecule(object):
             A NumPy array with the X, Y, Z coordinates of the
             geometric center of the molecule.
         """
-
         # Start assuming that the center is at 0, 0, 0
         centro = np.array([0,0,0], dtype=np.float64)
 
@@ -862,7 +867,7 @@ class Molecule(object):
 
         return centro
 
-    def read_xyz(self, file_name):
+    def read_xyz(self, file_name : str):
         """ Get molecule info from XYZ file
 
         Parameters
@@ -870,7 +875,6 @@ class Molecule(object):
         file_name : str
             Name of the XYZ file with the molecular coordinates.
         """
-
         # Empty the molecule's atoms
         self.atoms = []
 
@@ -885,7 +889,11 @@ class Molecule(object):
             self.add_atoms(Atom(*temp))
 
     def save_as_xyz(self):
+        """ Save molecule as an XYZ file
 
+        This method does not return anything, nor it requires
+        any parameters.
+        """
         # Create a template for the XYZ coordinates
         template = " {s} {x:16.8f} {y:16.8f} {z:16.8f}\n"
 
@@ -899,6 +907,137 @@ XYZ file of molecule: {self.name} - created by InformalFF
 
         with open(f"{self.name}.xyz", "w") as xyz:
             xyz.write(content)
+    
+    def get_limits(self) -> dict:
+        """ Method to get the geometric limits of the molecule
+
+        Compute find the limits of the molecule, considering the
+        atomic radii of the atoms.
+
+        Returns
+        -------
+        lims : dict
+            A dictionary with X, Y, Z keys holding lists for each
+            coordinate. Each list has:
+             - the minumum (low = l)
+             - the maximum (high = h)
+             - length of the box
+        """
+        # Change the representation of the coordinates to
+        # lists in each dimension
+        q_trsp = { q : [] for q in "eXYZ" }
+
+        for a in self.get_coords():
+            q_trsp["e"].append(a[0])
+            q_trsp["X"].append(a[1])
+            q_trsp["Y"].append(a[2])
+            q_trsp["Z"].append(a[3])
+        
+        # Build a new dictionary to hold the limits
+        lims = {}
+
+        for q in "XYZ":
+
+            # Compute the minimum and maximum values
+            low = min(q_trsp[q])
+            high = max(q_trsp[q])
+
+            # Find those values in the list of atoms
+            id_l = q_trsp[q].index(low)
+            id_h = q_trsp[q].index(high)
+
+            # Get the atoms' atomic radius to pad the molecule
+            pad_i = PERIODIC_TABLE.loc[q_trsp['e'][id_l], "AtomicRadius"]
+            pad_a = PERIODIC_TABLE.loc[q_trsp['e'][id_h], "AtomicRadius"]
+
+            # From pm to Angstrom
+            pad_i /= 100
+            pad_a /= 100
+
+            # Compute the limits
+            lims[q] = [low - pad_i,
+                       high + pad_a,
+                       high + pad_a - (low - pad_i)]
+
+        return lims
+    
+    def charge_in_field(self,
+                        x : float,
+                        y : float,
+                        z : float,
+                        charge : float = -1) -> tuple:
+        """ Method to get the value and vector of charge
+
+        Putting a probe at a specific point in 3D, compute the value of
+        the charge and the charge vector.
+
+        Parameters
+        ----------
+        x : float
+            The probe's X coordinate
+        y : float
+            The probe's Y coordinate
+        z : float
+            The probe's Z coordinate
+        charge : float
+            The probe's charge
+
+        Returns
+        -------
+        final_charge : float
+           The value of the probe at that particular point in space
+        final_vector : ndarray
+            The vector of the charge "perceived" by the probe
+        """
+        # Initialize charge and vector
+        final_charge = 0.0
+        final_vector = np.array([0, 0, 0], dtype = np.float64)
+
+        # Loop over atoms in the molecule
+        for a in self.get_coords():
+            # Probe coords
+            probe_c = np.array([x, y, z], dtype = np.float64)
+            # Atom coords
+            atom_c = np.array(a[1:4], dtype = np.float64)
+            # Create the vector between the probe and the atom
+            r_vect = atom_c - probe_c
+            # Add probe-atom vector to the final vector
+            final_vector += r_vect
+            # Compute the distance of the vector
+            r = np.linalg.norm(r_vect)
+            # Compute the product of charges over distance
+            final_charge += charge * a[4] / r
+        
+        # Normalize charge vector
+        final_vector /= np.linalg.norm(final_vector)
+        # Re-scale charge vector
+        final_vector *= final_charge
+
+        return final_charge, final_vector
+
+    def compute_grid(self,
+                     charge : float = -1,
+                     mesh : float = 0.5,
+                     limits : dict = {},
+                     padding : float = 0.2):
+
+        if len(limits) == 0:
+            limits = self.get_limits()
+
+        box = {}
+
+        for q in "XYZ":
+            temp_low = limits[q][0] - limits[q][2] * padding
+            temp_high = limits[q][1] + limits[q][2] * padding
+            box[q] = np.linspace(temp_low,
+                                 temp_high,
+                                 int((temp_high - temp_low) / mesh) + 1)
+        
+        # gX, gY, gZ = np.meshgrid(box['X'], box['Y'], box['Z'])
+
+        grid, v_field = self.charge_in_field(box['X'][:,None,None], box['Y'][None,:,None], box['Z'][None,None,:], charge)
+
+        return grid, v_field
 
 # ------------------------------------------------------- #
 #                    The Cluster Class                    #

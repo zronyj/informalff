@@ -11,11 +11,11 @@ import numpy as np
 
 @pytest.fixture
 def methane_molecule():
-    c1 = informalff.Atom("C", 0.00000, 0.00000, 0.00000)
-    h1 = informalff.Atom("H", 0.00000, 0.00000, 1.08900)
-    h2 = informalff.Atom("H", 1.02672, 0.00000,-0.36300)
-    h3 = informalff.Atom("H",-0.51336,-0.88916,-0.36300)
-    h4 = informalff.Atom("H",-0.51336, 0.88916,-0.36300)
+    c1 = informalff.Atom("C", 0.00000, 0.00000, 0.00000,-1.063938)
+    h1 = informalff.Atom("H", 0.00000, 0.00000, 1.08900, 0.272119)
+    h2 = informalff.Atom("H", 1.02672, 0.00000,-0.36300, 0.263905)
+    h3 = informalff.Atom("H",-0.51336,-0.88916,-0.36300, 0.263954)
+    h4 = informalff.Atom("H",-0.51336, 0.88916,-0.36300, 0.263961)
 
     atoms = [c1, h1, h2, h3, h4]
 
@@ -74,6 +74,16 @@ def test_molecule_bond_distance(methane_molecule):
 
     assert pytest.approx(bond, 1e-3) == 1.089
 
+def test_molecule_bond_distance2(methane_molecule):
+
+    mol1, atoms1 = methane_molecule
+
+    bonds = [0]*4
+
+    for b in range(1,5):
+        bonds[b-1] = mol1.get_distance(0, b)
+    
+    assert pytest.approx(sum(bonds), 1e-3) == pytest.approx(1.089 * 4, 1e-3)
 
 def test_molecule_angle(methane_molecule):
 
@@ -124,9 +134,9 @@ def test_molecule_selected_atoms(methane_molecule):
 
     second_atom = np.array(mol1.get_coords()[1][1:])
 
-    x = pytest.approx(second_atom[0],1) == 0.0
-    y = pytest.approx(second_atom[1],1) == 0.0
-    z = pytest.approx(second_atom[2],3) == 2.089
+    x = pytest.approx(second_atom[0], 0.1) == 0.0
+    y = pytest.approx(second_atom[1], 0.1) == 0.0
+    z = pytest.approx(second_atom[2], 1e-3) == 2.089
 
     assert x and y and z
 
@@ -140,9 +150,9 @@ def test_molecule_rotate_molecule_over_center(methane_molecule):
 
     second_atom = np.array(mol1.get_coords()[1][1:])
 
-    x = pytest.approx(second_atom[0],1) == 5.0
-    y = pytest.approx(second_atom[1],3) == 1.089
-    z = pytest.approx(second_atom[2],1) == 0.0
+    x = pytest.approx(second_atom[0], 0.1) == 5.0
+    y = pytest.approx(second_atom[1], 1e-3) == 1.089
+    z = pytest.approx(second_atom[2], 0.1) == 0.0
 
     assert x and y and z
 
@@ -154,11 +164,40 @@ def test_molecule_rotate_molecule_over_atom(methane_molecule):
 
     first_atom = np.array(mol1.get_coords()[0][1:])
 
-    x = pytest.approx(first_atom[0],1) == -1.089
-    y = pytest.approx(first_atom[1],3) == 0.0
-    z = pytest.approx(first_atom[2],3) == 1.089
+    x = pytest.approx(first_atom[0], 1e-3) == -1.089
+    y = pytest.approx(first_atom[1], 0.1) == 0.0
+    z = pytest.approx(first_atom[2], 1e-3) == 1.089
 
     assert x and y and z
+
+def test_molecule_rotate_selected_atoms_over_atom(methane_molecule):
+
+    mol1, atoms1 = methane_molecule
+
+    for q in range(2,5):
+        mol1.atoms[q].flag = True
+
+    c1 = mol1.get_coords()
+
+    mol1.rotate_selected_atoms_over_atom(np.array([0,0,120]), 0)
+
+    c2 = mol1.get_coords()
+
+    x1 = pytest.approx(c1[2][1], 1e-3) == pytest.approx(c2[3][1], 1e-3)
+    x2 = pytest.approx(c1[3][1], 1e-3) == pytest.approx(c2[4][1], 1e-3)
+    x3 = pytest.approx(c1[4][1], 1e-3) == pytest.approx(c2[2][1], 1e-3)
+
+    assert x1 and x2 and x3
+
+def test_molecule_rotate_selected_atoms_over_atom2(methane_molecule):
+
+    mol1, atoms1 = methane_molecule
+
+    for q in range(1,5):
+        mol1.atoms[q].flag = True
+    
+    with pytest.raises(ValueError) as e_info:
+        mol1.rotate_selected_atoms_over_atom(np.array([0,90,0]), 1)
 
 def test_molecule_rotate_molecule_over_bond(methane_molecule):
 
@@ -168,13 +207,45 @@ def test_molecule_rotate_molecule_over_bond(methane_molecule):
 
     mol1.rotate_molecule_over_bond(0, 1, 60)
 
-    fourth_atom = np.array(mol1.get_coords()[3][1:])
+    fifth_atom = np.array(mol1.get_coords()[4][1:])
 
-    x = pytest.approx(fourth_atom[0],1) == 0.0
-    y = pytest.approx(fourth_atom[1],1) == 0.0
-    z = pytest.approx(fourth_atom[2],1) == 0.0
+    x = np.round(fifth_atom[0], 3) == 0.0
+    y = np.round(fifth_atom[1], 3) == 0.0
+    z = np.round(fifth_atom[2], 3) == 0.0
 
     assert x and y and z
+
+def test_molecule_rotate_selected_atoms_over_bond(methane_molecule):
+
+    mol1, atoms1 = methane_molecule
+
+    for q in range(2,5):
+        mol1.atoms[q].flag = True
+
+    mol1.move_molecule(np.array([1.02672, 0, 0.36300]))
+
+    mol1.rotate_selected_atoms_over_bond(0, 1, 60)
+
+    fifth_atom = np.array(mol1.get_coords()[4][1:])
+
+    x = np.round(fifth_atom[0], 3) == 0.0
+    y = np.round(fifth_atom[1], 3) == 0.0
+    z = np.round(fifth_atom[2], 3) == 0.0
+
+    assert x and y and z
+
+def test_molecule_rotate_selected_atoms_over_bond2(methane_molecule):
+
+    mol1, atoms1 = methane_molecule
+
+    for q in range(1,5):
+        mol1.atoms[q].flag = True
+
+    mol1.move_molecule(np.array([1.02672, 0, 0.36300]))
+
+    with pytest.raises(ValueError) as e_info:
+        mol1.rotate_selected_atoms_over_bond(0, 1, 60)
+
 
 def test_molecule_mol_weight(methane_molecule):
 
@@ -202,3 +273,32 @@ def test_molecule_save_load_xyz(methane_molecule):
 
     assert atomsX and weight and center
 
+def test_molecule_get_limits():
+
+    h1 = informalff.Atom(element="H")
+    h2 = informalff.Atom(element="H")
+    h1.set_coordinates(0.0, 0.0, 0.0)
+    h2.set_coordinates(1.0, 0.0, 0.0)
+
+    mol1 = informalff.Molecule("H2")
+    mol1.add_atoms(h1, h2)
+
+    box = mol1.get_limits()
+
+    assert pytest.approx(box['X'][1] - box['X'][0], 0.1) == 3.4
+
+def test_molecule_charge_in_field(methane_molecule):
+
+    mol1, atoms1 = methane_molecule
+
+    charge, vector = mol1.charge_in_field(0,0,-0.55)
+
+    assert pytest.approx(charge, 1e-2) == 1.0
+
+# def test_molecule_compute_grid(methane_molecule):
+
+#     mol1, atoms1 = methane_molecule
+
+#     charge_grid, charge_field = mol1.compute_grid()
+
+#     assert charge_grid[0][0][0] == 1.0
