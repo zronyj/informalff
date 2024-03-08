@@ -53,7 +53,6 @@ def test_molecule_create():
 
     assert mol1.mol_weight - mol2.mol_weight == 0.0
 
-
 def test_molecule_geometric_center():
 
     h1 = informalff.Atom(element="H")
@@ -112,6 +111,14 @@ def test_molecule_center_of_mass(methane_molecule):
     mol1, atoms1 = methane_molecule
 
     assert sum(mol1.get_center_of_mass()) == 0.0
+
+def test_molecule_remove_atoms(methane_molecule):
+    
+    mol1, atoms1 = methane_molecule
+
+    mol1.remove_atoms(2,3)
+
+    assert mol1.get_num_atoms() == 3
 
 
 def test_molecule_move_molecule(methane_molecule):
@@ -287,6 +294,14 @@ def test_molecule_get_limits():
 
     assert pytest.approx(box['X'][1] - box['X'][0], 0.1) == 3.4
 
+def test_molecule_max_distance_to_center(methane_molecule):
+
+    mol1, atoms1 = methane_molecule
+
+    atom, distance = mol1.max_distance_to_center()
+
+    assert pytest.approx(distance, 1e-2) == 2.28
+
 def test_molecule_charge_in_field(methane_molecule):
 
     mol1, atoms1 = methane_molecule
@@ -295,10 +310,12 @@ def test_molecule_charge_in_field(methane_molecule):
 
     assert pytest.approx(charge, 1e-2) == 1.0
 
-# def test_molecule_compute_grid(methane_molecule):
+def test_molecule_compute_charge_box_grid(methane_molecule):
 
-#     mol1, atoms1 = methane_molecule
+    mol1, atoms1 = methane_molecule
 
-#     charge_grid, charge_field = mol1.compute_grid()
+    charge_grid, charge_field = mol1.compute_charge_box_grid(mesh = 0.1)
 
-#     assert charge_grid[0][0][0] == 1.0
+    total_charge = (charge_grid * (0.1)**3).sum()
+
+    assert np.round(total_charge, 1) == 2.6

@@ -4,11 +4,12 @@ import warnings          # To throw warnings instead of raising errors
 import numpy as np       # To do basic scientific computing
 import pandas as pd      # To manage tables and databases
 from pathlib import Path # To locate files in the file system
+from multiprocessing import Pool # To parallelize jobs
 import scipy.constants as cts # Universal constants
 # To be able to construct rotation matrices
 from scipy.spatial.transform import Rotation as R
 
-# bohr = 1 / (cts.physical_constants["Bohr radius"][0] * 1e10)
+bohr = 1 / (cts.physical_constants["Bohr radius"][0] * 1e10)
 
 # ------------------------------------------------------- #
 #              Setting up the Periodic Table              #
@@ -250,6 +251,48 @@ class Molecule(object):
 
         # Compute the molecular weight of the molecule
         self.get_mol_weight()
+    
+    def remove_atoms(self, *atoms : int):
+        """ Method to remove atoms from the molecule
+
+        Removes the specified atom(s) of the Molecule object. It
+        checks whether indices are correct.
+
+        Raises
+        ------
+        TypeError
+            If an empty list is provided to remove atoms.
+        ValueError
+            If there are no atoms to remove.
+            If the number(s) for the atom(s) don't match.
+
+        Parameters
+        ----------
+        *atoms : int
+            A `list` with the indices of the atoms in the Molecule
+            object.
+        """
+        # Check if the provided list is empty
+        if len(atoms) == 0:
+            raise TypeError("Molecule.remove_atoms() No atom indices "
+                            "were provided.")
+        # Check if there are any atoms to remove
+        if self.get_num_atoms() == 0:
+            raise ValueError("Molecule.remove_atoms() There are no "
+                             "atoms to be removed.")
+        # Check if all the provided atom indices are within range
+        for w in atoms:
+            if (w < 1) or (w > self.get_num_atoms()):
+                raise ValueError("Molecule.remove_atoms() The provided "
+                                 f"atom index {w} is out of range!")
+        
+        # Sort the given indices
+        atoms = [*atoms]
+        atoms.sort()
+
+        # Remove the atoms from the back to the front
+        for w in atoms[::-1]:
+            self.atoms.pop(w)
     
     def assign_charges(self, *charges : float):
         """ Method to assign charges to each atom in the molecule
@@ -867,7 +910,7 @@ class Molecule(object):
 
         return centro
 
-    def read_xyz(self, file_name : str):
+    def read_xyz(self, file_name : str) -> None:
         """ Get molecule info from XYZ file
 
         Parameters
@@ -888,7 +931,7 @@ class Molecule(object):
             temp = [float(c) if i != 0 else c for i, c in enumerate(temp)]
             self.add_atoms(Atom(*temp))
 
-    def save_as_xyz(self):
+    def save_as_xyz(self) -> None:
         """ Save molecule as an XYZ file
 
         This method does not return anything, nor it requires
@@ -961,6 +1004,64 @@ XYZ file of molecule: {self.name} - created by InformalFF
 
         return lims
     
+    def max_distance_to_center(self, center : str = "geom") -> float:
+        """ Method to get the radial distance from the molecule out
+
+        Compute find the distance from the center of the molecule to
+        its furthest atom (plus VdW radius).
+
+        Parameters
+        ----------
+        center : str
+            Specify which center of the molecule to use:
+            - com  : center of mass
+            - atom : atom closest to the center of mass
+            - geom : geometric center (coordinates)
+
+        Returns
+        -------
+        atom : int
+            The index of the atom which is the furthest from the
+            selected center.
+        dist : float
+            The distance from the selected center to the furthest
+            atom plus its VdW radius.
+        """
+        # Select the kind of center to be used
+        if center == "com":
+            mol_center = self.get_center_of_mass()
+        elif center == "atom":
+            mol_center = self.get_center_atom()[2]
+        else:
+            mol_center = self.get_center()
+
+        # If there's only one atom in the molecule
+        if len(self.atoms) == 1:
+            symbol = self.get_coords()[0][0]
+            dist = PERIODIC_TABLE.loc[symbol, "AtomicRadius"] / 100
+            return 0, dist
+        # If there's more than one atom
+        else:
+            dist = 0
+            atom = -1
+            for i, a in enumerate(self.get_coords()):
+                # Compute vector between atoms
+                dist_vec = mol_center - np.array(a[1:4])
+                # Compute norm of the vector = distance between nuclei
+                nuclear_dist = np.linalg.norm(dist_vec)
+                # Get the VdW radius of that atom
+                vdw_radius = PERIODIC_TABLE.loc[a[0], "AtomicRadius"] / 100
+                # Combine everything
+                temp_dist = nuclear_dist + vdw_radius
+                # If this newly computed distance is greater than the last
+                # save it (and the atom), otherwise, just ignore it
+                if temp_dist > dist:
+                    dist = temp_dist
+                    atom = i
+            
+            return atom, dist
+        
+    
     def charge_in_field(self,
                         x : float,
                         y : float,
@@ -1014,18 +1115,39 @@ XYZ file of molecule: {self.name} - created by InformalFF
         final_vector *= final_charge
 
         return final_charge, final_vector
+    
+    def create_box_grid(self,
+                        mesh : float = 0.1,
+                        limits : dict = {},
+                        padding : float = 0.2) -> list:
+        """ Method to create an imaginary grid
 
-    def compute_grid(self,
-                     charge : float = -1,
-                     mesh : float = 0.5,
-                     limits : dict = {},
-                     padding : float = 0.2):
+        Creating a box-shaped imaginary grid around the molecule,
+        considering the VdW radii and the padding.
 
+        Parameters
+        ----------
+        mesh : float
+            The space between points in the grid
+        limits : dict
+            The lower and upper limits of each side of the box
+        padding : float
+            Additional space to be left on the sides of the box
+
+        Returns
+        -------
+        grid : ndarray
+            A 3D grid with the position vector for each point
+        """
+        
+         # If the limits were not provided, compute them
         if len(limits) == 0:
             limits = self.get_limits()
 
+        # Place to store the lists to create the grid
         box = {}
 
+        # Create the lists for the grid
         for q in "XYZ":
             temp_low = limits[q][0] - limits[q][2] * padding
             temp_high = limits[q][1] + limits[q][2] * padding
@@ -1033,47 +1155,96 @@ XYZ file of molecule: {self.name} - created by InformalFF
                                  temp_high,
                                  int((temp_high - temp_low) / mesh) + 1)
         
-        # gX, gY, gZ = np.meshgrid(box['X'], box['Y'], box['Z'])
+        # Create empty grid
+        grid = []
+        # Iterate over x coordinate
+        for x in box['X']:
+            # Iterate over y coordinate
+            for y in box['Y']:
+                # Iterate over z coordinate
+                for z in box['Z']:
+                    grid.append([x,y,z])
+        
+        return grid
 
-        grid, v_field = self.charge_in_field(box['X'][:,None,None], box['Y'][None,:,None], box['Z'][None,None,:], charge)
+    def compute_charge_box_grid(self,
+                                charge : float = -1,
+                                mesh : float = 0.5,
+                                limits : dict = {},
+                                padding : float = 0.2) -> tuple:
+        """ Method to create an imaginary grid and compute the charge
+
+        Creating an imaginary grid and using each point in space as a
+        probe to compute the charge and charge vector.
+
+        Parameters
+        ----------
+        charge : float
+            The probe's charge
+        mesh : float
+            The space between points in the grid
+        limits : dict
+            The lower and upper limits of each side of the box
+        padding : float
+            Additional space to be left on the sides of the box
+
+        Returns
+        -------
+        grid : ndarray
+            A 3D grid with the charge evaluated at each point
+        v_field : ndarray
+            A 3D grid of vectors pointing towards the given charged
+            point.
+        """
+
+        raw_grid = self.create_box_grid(mesh=mesh,
+                                        limits=limits,
+                                        padding=padding)
+        
+        refined_grid = [g + [charge] for g in raw_grid]
+        
+        # Compute the list of z coordinates for a given x and y
+        # using all available processors
+        with Pool() as p:
+            output = p.starmap(self.charge_in_field,
+                                            refined_grid)
+            
+        # Open the result into charges and vectors
+        x_grid, x_vfield = zip(*output)
+        
+        # Turn into ndarray
+        grid = np.array(x_grid)
+        v_field = np.array(x_vfield)
 
         return grid, v_field
 
 # ------------------------------------------------------- #
-#                    The Cluster Class                    #
+#                  The Collection Class                   #
 # ------------------------------------------------------- #
+class Collection(object):
+    """ Class to represent a molecular Collection
 
-class Cluster(object):
-    """ Class to represent a molecular Cluster
-
-    This class is used to represent a molecular cluster,
-    it does so by considering each molecule with its name
+    This class is used to represent a simple molecular
+    systems by considering each molecule with its name
     in a dictionary, and adding several methods for the
-    analysis of the cluster.
-
-    Note
-    ----
-    The original idea was to work with results from MD
-    simulations of molecules in cubic solvation boxes.
-    Therefore, the get_limits and sub_cluster methods are
-    oriented towards cubic boxes.
+    analysis of the collection.
 
     Attributes
     ----------
     name : str
-        A name for the cluster (can be anything you choose)
+        A name for the collection (can be anything you choose)
     molecules : dict of Molecule
-        A `dict` with all the Molecule objects of the cluster
+        A `dict` with all the Molecule objects of the collection
     __nmols : int
-        The number of molecules in the cluster
+        The number of molecules in the collection
     __natoms : int
-        The number of atoms in the cluster
+        The number of atoms in the collection
     """
 
-    def __init__(self, name='cluster'):
-        """ Cluster constructor method
+    def __init__(self, name='collection'):
+        """ Collection constructor method
 
-        This is the method to construct the Cluster object
+        This is the method to construct the Collection object
 
         Parameters
         ----------
@@ -1084,22 +1255,22 @@ class Cluster(object):
         self.molecules = {}
         self.__nmols = 0
         self.__natoms = 0
-
+    
     def __repr__(self):
-        """ Method to represent a Cluster
+        """ Method to represent a Collection
 
         This method builds a string with the information
-        of the Cluster object. Said string will be displayed
+        of the Collection object. Said string will be displayed
         as a ticket whenever someone prints this object.
 
         Returns
         -------
             text : str
-                A general description of the Cluster, its molecules,
+                A general description of the Collection, its molecules,
                 atoms and dimensions.
         """
         content = "\n=========================\n"
-        content += f"    Molecular Cluster\n{self.name:^25}\n"
+        content += f"  Molecular  Collection\n{self.name:^25}\n"
         content += "-------------------------\n"
         content += f" Total molecules: {self.__nmols}\n"
         content += f" Total atoms: {self.__natoms}\n\n"
@@ -1130,62 +1301,11 @@ class Cluster(object):
         content += f"    {self.get_density():>8.4f} g/cm^3      \n"
         content += "=========================\n"
         return content
-
-    def __encoord(self, dims):
-        """ Method to encode dimensions
-
-        The method encodes the dimensions of a sub-cluster
-        relative to a super-cluster, in a list of hexadecimals.
-
-        Parameters
-        ----------
-        dims : dict
-            A `dict` containing the X, Y, Z lower and upper limits
-            of the sub-cluster.
-
-        Returns
-        -------
-        into_hex : list
-            A list with 3 `str` objects (hex numbers).
-        """
-        lims = self.get_limits()
-        # Enconde the position of the sub cluster
-        ratio5 = [round(dims[q][0]/lims[q][1] * 1E6) for q in 'xyz']
-        into_hex = [hex(r)[2:] for r in ratio5]
-        return into_hex
-
-    def __decoord(self):
-        """ Method to decode dimensions
-
-        The method decodes the dimensions of the super-cluster
-        relative to the sub-cluster.
-
-        Returns
-        -------
-        coords : dict
-            A `dict` with the X, Y, Z upper limits of the super-cluster.
-        """
-
-        # If the encoding in the name was done correctly ...
-        if self.name.count(".") == 2:
-            # Extract the hex-coordinates
-            namx, y, z = self.name.split('.')
-            x = namx[-5:]
-            # Get the limits of the current sub-cluster
-            l = self.get_limits()
-            # Some structure
-            qs = {'x':x, 'y':y, 'z':z}
-            # Convert the hex-coordinates into relative coordinates
-            dec = {i:int(q, 16) * 1E-6 for i, q in qs.items()}
-            # Create the final coordinates of the upper limit of the
-            # super-cluster.
-            coords = {q:round(l[q][0]/dec[q], 3) for q in 'xyz'}
-            return coords
-
+    
     def add_molecule(self, idm, mol):
-        """ Method to add a molecule to the cluster
+        """ Method to add a molecule to the collection
 
-        Adds the specified molecule to the Cluster object. It
+        Adds the specified molecule to the Collection object. It
         checks whether the object is actually an instance of
         Molecule.
 
@@ -1197,9 +1317,9 @@ class Cluster(object):
         Parameters
         ----------
         idm : str
-            The name of the molecule in the cluster.
+            The name of the molecule in the collection.
         mol : Molecule
-            A Molecule object to be added to the Cluster object.
+            A Molecule object to be added to the Collection object.
 
         Returns
         -------
@@ -1209,8 +1329,8 @@ class Cluster(object):
 
         # Check that the object is actually an Molecule instance
         if not isinstance(mol, Molecule):
-            raise TypeError(("Cluster.add_molecule() The added object is not "
-                            "an instance of Molecule."))
+            raise TypeError(("Collection.add_molecule() The added object is "
+                            "not an instance of Molecule."))
         
         # Add mols to the molecule
         self.molecules[idm] = mol
@@ -1221,17 +1341,17 @@ class Cluster(object):
 
         return True
 
-    def rem_molecule(self, idm):
-        """ Method to remove a molecule from the cluster
+    def remove_molecule(self, idm : str) -> bool:
+        """ Method to remove a molecule from the collection
 
-        Removes the specified molecule from the Cluster. It
-        checks whether the provided id is actually in the Cluster.
+        Removes the specified molecule from the Collection. It
+        checks whether the provided id is actually in the Collection.
         Otherwise, it warns the user.
 
         Parameters
         ----------
         idm : str
-            The name of the molecule in the cluster.
+            The name of the molecule in the collection.
 
         Returns
         -------
@@ -1241,384 +1361,264 @@ class Cluster(object):
 
         # Check that the molecule actually exists
         if idm in self.molecules.keys():
-            self.__natoms -= self.molecules[idm].get_atoms()
+            self.__natoms -= self.molecules[idm].get_num_atoms()
             self.__nmols -= 1
             # Remove the molecule from the cluster
             del self.molecules[idm]
             return True
         else:
-            warnings.warn((f"Cluster: No molecule {idm} in the cluster; "
-                           "no molecule deleted."))
+            warnings.warn((f"Collection: No molecule {idm} in the collection;"
+                           " no molecule deleted."))
             return False
+    
+    def get_center(self) -> np.ndarray:
+        """ Method to get the geometric center of the collection
 
-    def read_pdb(self, file_name):
-        """ Open a PDB file and read the data
-
-        This function opens a PDB file and reads each atom,
-        takes the coordinates and identity, and builds a
-        Molecule object with each molecule, adding them all
-        to a cluster dictionary.
-
-        Parameters
-        ----------
-        file_name : str
-            Name of the PDB file with the molecular coordinates.
+        Compute the center of the collection solely as an average
+        of the coordinates of its atoms.
 
         Returns
         -------
-        bool
-            True if everything works out.
+        centro : ndarray
+            A NumPy array with the X, Y, Z coordinates of the
+            geometric center of the molecule.
         """
+        # Start assuming that the center is at 0, 0, 0
+        centro = np.array([0,0,0], dtype=np.float64)
 
-        # Read the data from the PDB
-        with open(file_name, 'r') as pdb:
-            data = pdb.readlines()
+        # Iterate over all molecules and atoms
+        for mol in self.molecules.values():
+            for atom in mol.atoms:
 
-        # Filter out anything that's not an atom
-        data = [l for l in data if ("ATOM" in l) or ("HETATM" in l)]
+                # Take the coordinates of each atom and add them to the center
+                centro += atom.coords
 
-        # Create an empty list of molecules
-        self.name = file_name[:-4]
-        self.molecules = {}
-        self.__nmols = 0
-        self.__natoms = 0
+        # Scaling it down by the number of atoms
+        centro *= (1.0/self.__natoms)
 
-        # Iterate over atoms
-        for l in data:
+        return centro
 
-            # The PDB file format is based on columns
-            # https://www.biostat.jhsph.edu/~iruczins/teaching/260.655/links/pdbformat.pdf
-            # Extract the atomic id
-            pdb_ida = int(l[8:12].split()[0])
-            # Extract the atom name (AMBER)
-            pdb_anam = l[13:17].split()
-            # Extract the name of the fragment in the PDB
-            pdb_name = l[17:20].split()[0]
-            # Extract the number of equal fragment in the PDB
-            pdb_idm = int(l[22:27].split()[0])
-            # Extract the X, Y, Z coordinates of each atom from the PDB
-            pdb_x, pdb_y, pdb_z = [float(q) for q in l[31:55].split()]
-            try:
-                # Extract the element symbol of each atom from the PDB
-                pdb_sym = l[76:].split()[0]
-            except IndexError as e:
-                pdb_sym = pdb_anam[0]
-
-            # Create a molecule name
-            mol_name = f"{pdb_name}_{pdb_idm:04}"
-
-            # Create the atom object
-            temp_atom = Atom(pdb_sym, pdb_x, pdb_y, pdb_z)
-            temp_atom.amber_name = pdb_anam
-
-            # Create a Molecule object
-            if not (mol_name in self.molecules.keys()):
-                self.molecules[mol_name] = Molecule(mol_name)
-
-            # Add the atom
-            self.molecules[mol_name].add_atoms(temp_atom)
-
-        # Update the number of molecules
-        self.__nmols = len(self.molecules)
-
-        # Update the number of atoms
-        self.__natoms = len(data)
-
-        return True
-
-    def get_limits(self):
-        """ Get the limits of the molecular cluster
+    def get_limits(self) -> dict:
+        """ Get the limits of the molecular collection
 
         The function finds the maximum and minimum values for
         each coordinate: X, Y, Z. It returns that and the
-        distance of the cluster in each axis.
+        distance of the collection in each axis.
 
         Returns
         -------
-        limits : dict
+        lims : dict
             The lowest and highest values for the coordinates of
-            the atoms in the cluster, in each axis, and the size
-            of the cluster in each axis.
-        """
+            the atoms in the collection, in each axis, and the size
+            of the collection in each axis.
+        """     
+        # Change the representation of the coordinates to
+        # lists in each dimension
+        q_trsp = { q : [] for q in "eXYZ" }
 
-        # Initialize the limits
-        limits = {'x':[], 'y':[], 'z':[]}
-        
-        # Iterate over molecules
         for idm, mol in self.molecules.items():
-            # Iterate over atoms
             for a in mol.get_coords():
-                # Lower limits
-                if len(limits['x']) == 0:
-                    limits['x'].append(a[1])
-                    limits['y'].append(a[2])
-                    limits['z'].append(a[3])
-                else:
-                    if a[1] < limits['x'][0]: limits['x'][0] = a[1]
-                    if a[2] < limits['y'][0]: limits['y'][0] = a[2]
-                    if a[3] < limits['z'][0]: limits['z'][0] = a[3]
-                # Upper limits
-                if len(limits['x']) == 1:
-                    limits['x'].append(a[1])
-                    limits['y'].append(a[2])
-                    limits['z'].append(a[3])
-                else:
-                    if a[1] > limits['x'][1]: limits['x'][1] = a[1]
-                    if a[2] > limits['y'][1]: limits['y'][1] = a[2]
-                    if a[3] > limits['z'][1]: limits['z'][1] = a[3]
+                q_trsp["e"].append(a[0])
+                q_trsp["X"].append(a[1])
+                q_trsp["Y"].append(a[2])
+                q_trsp["Z"].append(a[3])
+        
+        # Build a new dictionary to hold the limits
+        lims = {}
 
-        # Compute the span of the molecules over each axis
-        limits['x'].append(limits['x'][1] - limits['x'][0])
-        limits['y'].append(limits['y'][1] - limits['y'][0])
-        limits['z'].append(limits['z'][1] - limits['z'][0])
+        for q in "XYZ":
 
-        return limits
+            # Compute the minimum and maximum values
+            low = min(q_trsp[q])
+            high = max(q_trsp[q])
 
-    def sub_cluster(self, dims):
-        """ Extract a cluster box from the larger cluster
+            # Find those values in the list of atoms
+            id_l = q_trsp[q].index(low)
+            id_h = q_trsp[q].index(high)
 
-        All molecules with at least one atom inside the box
-        defined by the provided dimensions will be included
-        and returned in a new cluster. It considers periodic
-        boundary conditions, so if the sub-cluster box is
-        slightly out of the cluster's boundaries, it the
-        function will replicate the molecules to fill the box
-        specified by the provided dimensions.
+            # Get the atoms' atomic radius to pad the molecule
+            pad_i = PERIODIC_TABLE.loc[q_trsp['e'][id_l], "AtomicRadius"]
+            pad_a = PERIODIC_TABLE.loc[q_trsp['e'][id_h], "AtomicRadius"]
 
-        Note
-        ----
-        The new cluster may have different dimensions than
-        the ones defined by the provided dimensions. This
-        happens because any molecule with at least one atom
-        inside the box will be included. That molecule will
-        change the final dimensions of the box.
+            # From pm to Angstrom
+            pad_i /= 100
+            pad_a /= 100
+
+            # Compute the limits
+            lims[q] = [low - pad_i,
+                       high + pad_a,
+                       high + pad_a - (low - pad_i)]
+        
+        return lims
+
+    def charge_in_field(self,
+                        x : float,
+                        y : float,
+                        z : float,
+                        charge : float = -1) -> tuple:
+        """ Method to get the value and vector of charge
+
+        Putting a probe at a specific point in 3D, compute the value of
+        the charge and the charge vector.
 
         Parameters
         ----------
-        dims : dict
-            The lowest and highest values of the coordinates
-            in each axis, for the atoms in the sub-cluster.
+        x : float
+            The probe's X coordinate
+        y : float
+            The probe's Y coordinate
+        z : float
+            The probe's Z coordinate
+        charge : float
+            The probe's charge
 
         Returns
         -------
-        sub_c : Cluster
-            A Cluster object with all the molecules within the
-            provided dimensions.
+        final_charge : float
+           The value of the probe at that particular point in space
+        final_vector : ndarray
+            The vector of the charge "perceived" by the probe
         """
+        # Initialize charge and vector
+        final_charge = 0.0
+        final_vector = np.array([0, 0, 0], dtype = np.float64)
 
-        # Setting everything correctly before subclustering
-        self.fix_box()
-
-        # Get the cluster limits
-        lims = self.get_limits()
-
-        # Check that the dimensions of the small box are within the cluster
-        outside = [dims[q][1] > lims[q][1] for q in 'xyz']
-
-        # Initialize dimensions of the sub-box
-        sub_dims = {}
-
-        # Dimensions of the sub-box
-        for i, q in enumerate('xyz'):
-            # If this dimension is outside, establish new limits (PBC)
-            if outside[i]:
-                sub_dims[q] = [[dims[q][0], lims[q][1]],
-                        [lims[q][0], lims[q][0] + dims[q][1] - lims[q][1]]]
-            # Else, just use the current limits
-            else:
-                sub_dims[q] = [[dims[q][0], dims[q][1]]]
-
-        # Building the list of molecules within X
-        possible_x = [[] for i in range(len(sub_dims['x']))]
-        # Building the list of molecules within Y
-        possible_y = [[] for j in range(len(sub_dims['y']))]
-        # Building the list of molecules within Z
-        possible_z = [[] for k in range(len(sub_dims['z']))]
-
-        # Iterate over all molecules ...
-        for idm, mol in self.molecules.items():
-            # Iterate over atoms
+        # Loop over molecules and atoms in the collection
+        for mol in self.molecules.values():
             for a in mol.get_coords():
-                # Iterate over the new limits
-
-                # Check over all domains
-                for i, x in enumerate(sub_dims['x']):
-                    # Add molecule if within X
-                    if (a[1] > x[0]) and (a[1] < x[1]):
-                        possible_x[i].append(idm)
-
-                # Check over all domains
-                for j, y in enumerate(sub_dims['y']):
-                    # Add molecule if within Y
-                    if (a[2] > y[0]) and (a[2] < y[1]):
-                        possible_y[j].append(idm)
-
-                # Check over all domains
-                for k, z in enumerate(sub_dims['z']):
-                    # Add molecule if within Z
-                    if (a[3] > z[0]) and (a[3] < z[1]):
-                        possible_z[k].append(idm)
+                # Probe coords
+                probe_c = np.array([x, y, z], dtype = np.float64)
+                # Atom coords
+                atom_c = np.array(a[1:4], dtype = np.float64)
+                # Create the vector between the probe and the atom
+                r_vect = atom_c - probe_c
+                # Add probe-atom vector to the final vector
+                final_vector += r_vect
+                # Compute the distance of the vector
+                r = np.linalg.norm(r_vect)
+                # Compute the product of charges over distance
+                final_charge += charge * a[4] / r
         
-        # Removing duplicates
-        possible_x = [set(i) for i in possible_x]
-        possible_y = [set(j) for j in possible_y]
-        possible_z = [set(k) for k in possible_z]
+        # Normalize charge vector
+        final_vector /= np.linalg.norm(final_vector)
+        # Re-scale charge vector
+        final_vector *= final_charge
 
-        # Intersect all sets to obtain all sub-boxes (octants?)
-        mol_sets = {}
-        for i, x in enumerate(possible_x):
-            for j, y in enumerate(possible_y):
-                for k, z in enumerate(possible_z):
-                    unsorted_mols = x.intersection(y).intersection(z)
-                    mol_sets[f"{i}{j}{k}"] = sorted(list(unsorted_mols))
+        return final_charge, final_vector
+    
+    def create_box_grid(self,
+                        mesh : float = 0.1,
+                        limits : dict = {},
+                        padding : float = 0.2) -> list:
+        """ Method to create an imaginary grid
 
-        # Create a new cluster with the required molecules
-        sub_c = Cluster()
-
-        # Iterate over all sets
-        for ids, mol_set in mol_sets.items():
-
-            # Prepare to move the molecules
-            motion = np.array([ int(ids[0]) * lims['x'][2],
-                                int(ids[1]) * lims['y'][2],
-                                int(ids[2]) * lims['z'][2],])
-
-            # Iterate over all molecules
-            for idm in mol_set:
-                # Add the molecule to the new cluster
-                # If the object is not deepcopied, then the original will
-                # suffer the same fate as the copy
-                sub_c.add_molecule(idm, copy.deepcopy(self.molecules[idm]))
-                # Move the molecule
-                sub_c.molecules[idm].move_molecule(motion)
-
-        # Enconde the position of the sub cluster
-        sub_lims = sub_c.get_limits()
-        codes = self.__encoord(sub_lims)
-        # Name the new cluster
-        sub_c.name = f'{self.name}_{codes[0]}.{codes[1]}.{codes[2]}'
-
-        return sub_c
-
-
-    def is_in_box(self, idm, dims):
-        """ Check if a molecule is in a given box region
-
-        It will try to find the molecule in the box specified
-        by the provided dimensions.
+        Creating a box-shaped imaginary grid around the molecule,
+        considering the VdW radii and the padding.
 
         Parameters
         ----------
-        idm : str
-            The name of the molecule to be found
-        dims : dict
-            The lowest and highest values of the coordinates
-            in each axis, for the atoms in the sub-cluster
+        mesh : float
+            The space between points in the grid
+        limits : dict
+            The lower and upper limits of each side of the box
+        padding : float
+            Additional space to be left on the sides of the box
 
         Returns
         -------
-        bool : 
-            Returns true if the molecule is in the given
-            coordinates, and false if not.
+        grid : ndarray
+            A 3D grid with the position vector for each point
         """
+        
+         # If the limits were not provided, compute them
+        if len(limits) == 0:
+            limits = self.get_limits()
 
-        # Initialize the atom count
-        inside_atoms = 0
+        # Place to store the lists to create the grid
+        box = {}
 
-        # Get the cluster limits
-        lims = self.get_limits()
+        # Create the lists for the grid
+        for q in "XYZ":
+            temp_low = limits[q][0] - limits[q][2] * padding
+            temp_high = limits[q][1] + limits[q][2] * padding
+            box[q] = np.linspace(temp_low,
+                                 temp_high,
+                                 int((temp_high - temp_low) / mesh) + 1)
+        
+        # Create empty grid
+        grid = []
+        # Iterate over x coordinate
+        for x in box['X']:
+            # Iterate over y coordinate
+            for y in box['Y']:
+                # Iterate over z coordinate
+                for z in box['Z']:
+                    grid.append([x,y,z])
+        
+        return grid
 
-        # Check that the dimensions of the box are within the cluster
-        inside = [dims[q][1] < lims[q][1] for q in 'xyz']
+    def compute_charge_box_grid(self,
+                                charge : float = -1,
+                                mesh : float = 0.5,
+                                limits : dict = {},
+                                padding : float = 0.2) -> tuple:
+        """ Method to create an imaginary grid and compute the charge
 
-        limx = list(dims['x'])
-        limy = list(dims['y'])
-        limz = list(dims['z'])
+        Creating an imaginary grid and using each point in space as a
+        probe to compute the charge and charge vector.
 
-        # If any of the 3 coordinates of the box are out of the cluster ...
-        if sum(inside) != 3:
-            if inside[0]: limx[1] = lims['x'][1]
-            if inside[1]: limy[1] = lims['y'][1]
-            if inside[2]: limz[1] = lims['z'][1]
-
-        # Iterate over atoms
-        for a in self.molecules[idm].get_coords():
-
-            # Initialize detection control for all 3 dimensions
-            is_in = [0,0,0]
-
-            # Get all 3 coordinates
-            x, y, z = a[1:]
-
-            # Check if each coordinate of the atom is inside the box
-            if (x > limx[0]) and (x < limx[1]): is_in[0] = 1
-            if (y > limy[0]) and (y < limy[1]): is_in[1] = 1
-            if (z > limz[0]) and (z < limz[1]): is_in[2] = 1
-
-            # If they all are, count the atom in
-            if sum(is_in) == 3: inside_atoms += 1
-
-        # If there is at least 1 atom inside the box,
-        # consider the molecule inside
-        if inside_atoms >= 1:
-            return True
-        else:
-            return False
-
-    def get_density(self):
-        """ Calculate the cluster's density
-
-        The method will compute the total mass and volume of
-        the cluster and divide them to obtain the density.
-        Consider that several units have to be adjusted!
+        Parameters
+        ----------
+        charge : float
+            The probe's charge
+        mesh : float
+            The space between points in the grid
+        limits : dict
+            The lower and upper limits of each side of the box
+        padding : float
+            Additional space to be left on the sides of the box
 
         Returns
         -------
-        density : float
-            The density of the cluster in g/cm^3
+        grid : ndarray
+            A 3D grid with the charge evaluated at each point
+        v_field : ndarray
+            A 3D grid of vectors pointing towards the given charged
+            point.
         """
 
-        self.fix_box()
+        raw_grid = self.create_box_grid(mesh=mesh,
+                                        limits=limits,
+                                        padding=padding)
+        
+        refined_grid = [g + [charge] for g in raw_grid]
+        
+        # Compute the list of z coordinates for a given x and y
+        # using all available processors
+        with Pool() as p:
+            output = p.starmap(self.charge_in_field,
+                                            refined_grid)
+            
+        # Open the result into charges and vectors
+        x_grid, x_vfield = zip(*output)
+        
+        # Turn into ndarray
+        grid = np.array(x_grid)
+        v_field = np.array(x_vfield)
 
-        # Molecules per mol
-        avogadro = 6.022E23
+        return grid, v_field
 
-        # Get the mass of all molecules in g/mol
-        mass = 0
-        for mol in self.molecules.keys():
-            self.molecules[mol].get_mol_weight()
-            mass += self.molecules[mol].mol_weight
+    def corner_box(self):
+        """ Re-position the collection putting an edge on the origin
 
-        # Gram per mol to kilogram
-        mass /= (1000 * avogadro)
-
-        # Get side lengths and compute the volume in Angstrom
-        lims = self.get_limits()
-        volume = lims['x'][2] * lims['y'][2] * lims['z'][2]
-
-        # Cubic Angstrom to cubic meter
-        volume *= (1E-10)**3
-
-        # Density in kg/m^3
-        density = mass / volume
-
-        # Density in g/cm^3 (g/mL)
-        density /= 1000
-
-        return density
-
-
-    def fix_box(self):
-        """ Re-position the cluster putting an edge on the origin
-
-        The lower limits (in the X, Y, Z axes) of the cluster will
+        The lower limits (in the X, Y, Z axes) of the collection will
         be re-positioned to the origin. The idea is not to have
         negative coordinates.
 
         Note
         ----
             This method doesn't require any parameters and will not
-            return anything. The change is done to the Cluster object
+            return anything. The change is done to the collection object
             itself.
         """
 
@@ -1626,7 +1626,7 @@ class Cluster(object):
         mins = np.array([lims['x'][0], lims['y'][0], lims['z'][0]])
 
         # Iterate over molecules
-        for idm, mol in self.molecules.items():
+        for mol in self.molecules.items():
             # Iterate over atoms
             for a in mol.atoms:
                 # Get the atom's current coordinates
@@ -1635,8 +1635,40 @@ class Cluster(object):
                 new_coords = coords - mins
                 # Move the atom ...
                 a.set_coordinates(new_coords[0],new_coords[1],new_coords[2])
+    
+    def center_box(self):
+        """ Re-position the collection putting the center at the origin
 
-    def save_as_pdb(self, f_nam="cluster"):
+        The center of the box (in the X, Y, Z axes) of the collection will
+        be re-positioned to the origin.
+
+        Note
+        ----
+            This method doesn't require any parameters and will not
+            return anything. The change is done to the collection object
+            itself.
+        """
+
+        center = self.get_center() * (-1)
+
+        # Iterate over molecules
+        for mol in self.molecules.items():
+            # Iterate over atoms
+            for a in mol.atoms:
+                # Move the current atom
+                a.move_atom(*center.tolist())
+
+    def save_as_pdb(self, f_nam : str = "collection") -> None:
+        """ Save collection as an PDB file
+
+        This method does not return anything, nor it requires
+        any parameters.
+
+        Parameters
+        ----------
+        f_nam : str
+            The name of the file *without the extension*!
+        """
 
         # Initialize the PDB file content
         content = ("CRYST1    0.000    0.000    0.000  "
@@ -1682,13 +1714,23 @@ class Cluster(object):
             xyz.write(content)
 
 
-    def save_as_xyz(self, f_nam="cluster"):
+    def save_as_xyz(self, f_nam : str ="collection") -> None:
+        """ Save collection as an XYZ file
+
+        This method does not return anything, nor it requires
+        any parameters.
+
+        Parameters
+        ----------
+        f_nam : str
+            The name of the file *without the extension*!
+        """
 
         # Create a template for the XYZ coordinates
         template = " {s} {x:16.8f} {y:16.8f} {z:16.8f}\n"
 
         content = f"""{self.__natoms}
-XYZ file of cluster: {self.name} - created by InformalFF
+XYZ file of collection: {self.name} - created by InformalFF
 """
 
         # Iterate over molecules
