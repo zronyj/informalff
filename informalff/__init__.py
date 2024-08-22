@@ -1,8 +1,9 @@
 """Attempt at creating an automated molecular force field creator from QM calculations."""
 
 # Add imports here
-from .chemistry import *
-
+from .atom import *
+from .molecule import *
+from .collection import *
 
 from ._version import __version__
 

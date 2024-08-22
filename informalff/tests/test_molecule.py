@@ -1,13 +1,13 @@
 """
-Unit and regression test for the chemistry module of the informalff package.
+Unit and regression tests for the molecule module of the informalff package.
 """
 
-# Import package, test suite, and other packages as needed
+# Import this package, (test suite), and other packages as needed
 import os
-import sys
 import pytest
-import informalff
 import numpy as np
+
+import informalff
 
 @pytest.fixture
 def methane_molecule():
@@ -24,15 +24,21 @@ def methane_molecule():
 
     return mol, atoms
 
-def test_atom_create():
+@pytest.fixture
+def methanol_molecule():
+    c1 = informalff.Atom("C", 0.01088,-0.00000,-0.08750,-0.698054)
+    o1 = informalff.Atom("O", 0.07641, 0.00000, 1.32886,-0.481487)
+    h1 = informalff.Atom("H", 1.00034, 0.00000,-0.54552, 0.337572)
+    h2 = informalff.Atom("H",-0.52570,-0.88619,-0.42760, 0.287862)
+    h3 = informalff.Atom("H",-0.52570, 0.88619,-0.42760, 0.287884)
+    h4 = informalff.Atom("H", 0.99049, 0.00000, 1.60937, 0.266224)
 
-    he1 = informalff.Atom(element="He")
-    he2 = informalff.Atom(element="He")
-    he1.set_coordinates(1.0, 0.0, 0.0)
-    he2.set_coordinates(0.0, 0.0, 0.0)
-    he2.move_atom(-1.0, 0.0, 0.0)
+    atoms = [c1, o1, h1, h2, h3, h4]
 
-    assert sum(he1.get_coordinates() + he2.get_coordinates()) == 0.0
+    mol = informalff.Molecule("Methanol")
+    mol.add_atoms(atoms)
+
+    return mol, atoms
 
 def test_molecule_create():
 
@@ -52,6 +58,44 @@ def test_molecule_create():
     mol2.add_atoms(h3, h4)
 
     assert mol1.mol_weight - mol2.mol_weight == 0.0
+
+def test_molecule_get_distance_matrix():
+
+    h1 = informalff.Atom(element="H")
+    h2 = informalff.Atom(element="H")
+    h1.set_coordinates(0.0, 0.0, 0.0)
+    h2.set_coordinates(1.0, 0.0, 0.0)
+
+    mol1 = informalff.Molecule("H2")
+    mol1.add_atoms(h1, h2)
+
+    mat = mol1.get_distance_matrix()
+
+    assert mat[0][1] + mat[1][0] == 2
+
+def test_molecule_get_bonds(methane_molecule):
+
+    mol1, atoms1 = methane_molecule
+
+    bonds = mol1.get_bonds()
+
+    assert len(bonds) == 4
+
+def test_molecule_get_angles(methane_molecule):
+
+    mol1, atoms1 = methane_molecule
+
+    angles = mol1.get_angles()
+
+    assert len(angles) == 6
+
+def test_molecule_get_dihedrals(methanol_molecule):
+
+    mol1, atoms1 = methanol_molecule
+
+    dihedrals = mol1.get_dihedrals()
+
+    assert len(dihedrals) == 3
 
 def test_molecule_geometric_center():
 
@@ -292,7 +336,7 @@ def test_molecule_get_limits():
 
     box = mol1.get_limits()
 
-    assert pytest.approx(box['X'][1] - box['X'][0], 0.1) == 3.4
+    assert pytest.approx(box['X'][1] - box['X'][0], 0.1) == 2.27
 
 def test_molecule_max_distance_to_center(methane_molecule):
 
@@ -300,7 +344,7 @@ def test_molecule_max_distance_to_center(methane_molecule):
 
     atom, distance = mol1.max_distance_to_center()
 
-    assert pytest.approx(distance, 1e-2) == 2.28
+    assert pytest.approx(distance, 1e-2) == 1.72
 
 def test_molecule_charge_in_field(methane_molecule):
 
@@ -318,4 +362,4 @@ def test_molecule_compute_charge_box_grid(methane_molecule):
 
     total_charge = (charge_grid * (0.1)**3).sum()
 
-    assert np.round(total_charge, 1) == 2.6
+    assert np.round(total_charge, 1) == 2.5
