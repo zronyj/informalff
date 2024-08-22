@@ -82,7 +82,7 @@ class Molecule(object):
 
         return temp
 
-    def add_atoms(self, *atoms : Atom):
+    def add_atoms(self, *atoms : Atom) -> None:
         """ Method to add atoms to the molecule
 
         Adds the specified atom(s) to the Molecule object. It
@@ -126,7 +126,7 @@ class Molecule(object):
         # Compute the molecular weight of the molecule
         self.get_mol_weight()
     
-    def remove_atoms(self, *atoms : int):
+    def remove_atoms(self, *atoms : int) -> None:
         """ Method to remove atoms from the molecule
 
         Removes the specified atom(s) of the Molecule object. It
@@ -168,7 +168,7 @@ class Molecule(object):
         for w in atoms[::-1]:
             self.atoms.pop(w)
     
-    def assign_charges(self, *charges : float):
+    def assign_charges(self, *charges : float) -> None:
         """ Method to assign charges to each atom in the molecule
 
         Raises
@@ -1327,3 +1327,6 @@ XYZ file of molecule: {self.name} - created by InformalFF
 
         return grid, v_field
 
+if __name__ == "__main__":
+    # Do something if this file is invoked on its own
+    print("This library was not intended as a standalone program.")

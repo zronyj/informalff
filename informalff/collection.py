@@ -164,25 +164,25 @@ class Collection(object):
                            "in the collection; no molecule deleted."))
             return False
     
-    def clash_detector(self) -> bool:
-        """ Method to check if two molecules clash inside the collection
+    def detect_collisions(self) -> bool:
+        """ Method to check if two molecules collide inside the collection
 
-        Only checks if two molecules are two close in the collection and
-        classifies it as a clash.
+        Only checks if two molecules are too close in the collection and
+        classifies it as a collision.
 
         Returns
         -------
         bool
             True if two atoms from two different molecules are too close
             False if all molecules are sufficiently far away, or if there
-            are not enough molecules for clashes.
+            are not enough molecules for collisions.
         """
 
         # If there's less than 2 atoms, there's no point
         if self.__natoms < 2:
-            warnings.warn("Collection.clash_detector() Not enough "
+            warnings.warn("Collection.detect_collisions() Not enough "
                           "molecules in the collection to check for"
-                          "clashes.")
+                          "collisions.")
             return False
 
         # Remaining molecules to be checked
@@ -206,10 +206,11 @@ class Collection(object):
                         # Compute the minumum distance and the real one
                         min_dist = (vdw_r1 + vdw_r2) / 100
                         real_dist = np.linalg.norm(v2 - v1)
-                        # Check for a clash
+                        # Check for a collision
                         if real_dist <= min_dist:
-                            warnings.warn("Collection.clash_detector() Clash "
-                            f"found between molecules {idm1} and {idm2}.")
+                            warnings.warn("Collection.detect_collisions() "
+                            "Collision found between molecules "
+                            f"{idm1} and {idm2}.")
 
                             return True
         return False

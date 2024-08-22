@@ -48,7 +48,7 @@ def test_collection_get_center():
 
     assert np.linalg.norm(temp) == 0
 
-def test_collection_clash_detector(methane_molecule):
+def test_collection_detect_collisions(methane_molecule):
 
     mol1, atoms1 = methane_molecule
 
@@ -65,4 +65,4 @@ def test_collection_clash_detector(methane_molecule):
     coll.add_molecule("CH4", mol1)
 
     with pytest.warns(UserWarning, match="found between molecules"):
-        assert coll.clash_detector()
+        assert coll.detect_collisions()

@@ -269,3 +269,7 @@ class Atom(object):
                 grid[q] = grid[q] + temp_grid[q]
 
         return grid
+
+if __name__ == "__main__":
+    # Do something if this file is invoked on its own
+    print("This library was not intended as a standalone program.")
