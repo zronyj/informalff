@@ -1,5 +1,5 @@
 
-import matplotlib.pyplot as plt # Plotting library
+#import matplotlib.pyplot as plt # Plotting library
 import numpy as np       # To do basic scientific computing
 import os                # To navigate the file system
 import pandas as pd      # To manage tables and databases
@@ -78,17 +78,17 @@ def fibonacci_grid_shell(center : np.ndarray,
     
     return grid
 
-def plot_shell(grid):
-    fig = plt.figure()
-    ax = fig.add_subplot(111, projection = '3d')
-    ax.set_box_aspect((np.ptp(grid['X']), np.ptp(grid['Y']), np.ptp(grid['Z'])))
-    ax.scatter(grid['X'], grid['Y'], grid['Z'], 'b')
-    ax.set_xlabel('X')
-    ax.set_ylabel('Y')
-    ax.set_zlabel('Z')
-    ax.set_title('Grid in sphere')
-    ax.grid(True)
-    plt.show()
+# def plot_shell(grid):
+#     fig = plt.figure()
+#     ax = fig.add_subplot(111, projection = '3d')
+#     ax.set_box_aspect((np.ptp(grid['X']), np.ptp(grid['Y']), np.ptp(grid['Z'])))
+#     ax.scatter(grid['X'], grid['Y'], grid['Z'], 'b')
+#     ax.set_xlabel('X')
+#     ax.set_ylabel('Y')
+#     ax.set_zlabel('Z')
+#     ax.set_title('Grid in sphere')
+#     ax.grid(True)
+#     plt.show()
 
 # ------------------------------------------------------- #
 #                     The Atom Class                      #
