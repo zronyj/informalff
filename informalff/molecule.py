@@ -36,6 +36,8 @@ class Molecule(object):
         A name for the molecule (can be anything you choose)
     atoms : list of Atom
         A `list` with all the Atom objects of the molecule
+    bonds : list of list
+        A `list` with all the 
     mol_weight : float
         The molecular weight
     charge : float
@@ -167,6 +169,42 @@ class Molecule(object):
         # Remove the atoms from the back to the front
         for w in atoms[::-1]:
             self.atoms.pop(w)
+    
+    def toggle_selection(self) -> None:
+        """ Method to activate/deactivate atoms in the molecule
+
+        The selection of the atoms in the molecule will be flipped
+        """
+        # Go over list of atoms
+        for a in self.atoms:
+
+            # Flip the selection of the atoms in the molecule
+            if a.flag == True:
+                a.flag = False
+            else:
+                a.flag = True
+    
+    def select(self) -> None:
+        """ Method to select all atoms in the molecule
+
+        All atoms of the molecule will be selected
+        """
+        # Go over list of atoms
+        for a in self.atoms:
+
+            # Select the atoms
+            a.flag = True
+    
+    def deselect(self) -> None:
+        """ Method to deselect all atoms in the molecule
+
+        All atoms of the molecule will be deselected
+        """
+        # Go over list of atoms
+        for a in self.atoms:
+
+            # Select the atoms
+            a.flag = False
     
     def assign_charges(self, *charges : float) -> None:
         """ Method to assign charges to each atom in the molecule
@@ -984,6 +1022,35 @@ XYZ file of molecule: {self.name} - created by InformalFF
 
         with open(f"{self.name}.xyz", "w") as xyz:
             xyz.write(content)
+    
+    def save_selection_as_xyz(self) -> None:
+        """ Save selected atoms in the molecule as an XYZ file
+
+        This method does not return anything, nor it requires
+        any parameters.
+        """
+        # Create a template for the XYZ coordinates
+        template = " {s} {x:16.8f} {y:16.8f} {z:16.8f}\n"
+
+        num_atoms = 0
+        selected_coords = ""
+
+        # Iterate over atoms
+        for a in self.atoms:
+            if a.flag:
+                num_atoms += 1
+                selected_coords += template.format(
+                                            s=a.element,
+                                            x=a.coords[1],
+                                            y=a.coords[2],
+                                            z=a.coords[3])
+        
+        header = f"""{len(num_atoms)}
+XYZ file of atom selection from molecule: {self.name} - created by InformalFF
+"""
+
+        with open(f"sel_{self.name}.xyz", "w") as xyz:
+            xyz.write(header + selected_coords)
     
     def get_limits(self) -> dict:
         """ Method to get the geometric limits of the molecule

@@ -586,6 +586,42 @@ XYZ file of collection: {self.name} - created by InformalFF
 
         with open(f"{f_nam}.xyz", "w") as xyz:
             xyz.write(content)
+    
+    def save_selection_as_xyz(self, f_nam : str ="collection") -> None:
+        """ Save collection as an XYZ file
+
+        This method does not return anything, nor it requires
+        any parameters.
+
+        Parameters
+        ----------
+        f_nam : str
+            The name of the file *without the extension*!
+        """
+
+        # Create a template for the XYZ coordinates
+        template = " {s} {x:16.8f} {y:16.8f} {z:16.8f}\n"
+
+        num_atoms = 0
+        selected_coords = ""
+
+        # Iterate over molecules
+        for idm, mol in self.molecules.items():
+            # Iterate over atoms
+            for a in mol.atoms:
+                num_atoms += 1
+                selected_coords += template.format(
+                                            s=a.element,
+                                            x=a.coords[1],
+                                            y=a.coords[2],
+                                            z=a.coords[3])
+
+        header = f"""{self.__natoms}
+XYZ file of atom selection from collection: {self.name} - created by InformalFF
+"""
+
+        with open(f"{f_nam}.xyz", "w") as xyz:
+            xyz.write(header + selected_coords)
 
 
 if __name__ == "__main__":
