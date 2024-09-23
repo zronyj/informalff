@@ -37,7 +37,11 @@ class Molecule(object):
     atoms : list of Atom
         A `list` with all the Atom objects of the molecule
     bonds : list of list
-        A `list` with all the 
+        A `list` with all the pairs of atoms creating bonds
+    angles : list of list
+        A `list` with all the trios of atoms creating angles
+    dihedrals : list of list
+        A `list` with all the quartets of atoms creating dihedrals
     mol_weight : float
         The molecular weight
     charge : float
@@ -230,7 +234,7 @@ class Molecule(object):
         for c, a in enumerate(self.atoms):
             a.charge = charges[c]
 
-    def get_mol_weight(self):
+    def get_mol_weight(self) -> bool:
         """ Method to get the Molecule's mass
 
         Will compute the molecule's mass using the periodic table
