@@ -246,10 +246,15 @@ class ORCA_driver(QM_driver):
         # Iterate over all lines
         for i, l in enumerate(data):
             
-            # Parse the electronic energy
+            # Parse the final energy
             if 'FINAL SINGLE POINT ENERGY' in l:
                 temp = l.split()
-                results['Energy[SPE]'] = float(temp[-1])
+                results['Final Energy'] = float(temp[-1])
+            
+            # Parse the SCF energy
+            if 'TOTAL SCF ENERGY' in l:
+                temp = data[i + 3].split()
+                results['Energy[SCF]'] = float(temp[3])
 
             # Parse the orbital energies
             if 'ORBITAL ENERGIES' in l:
@@ -288,8 +293,10 @@ class ORCA_driver(QM_driver):
             
             # Parse the dipole moment
             if 'Total Dipole Moment' in l:
+                results['Dipole[Debye]'] = []
                 temp = l.split()
-                results['Dipole[Debye]'] = [ float(j) for j in temp[4:] ]
+                for j in temp[4:]:
+                    results['Dipole[Debye]'].append( float(j) * 2.5417464519 )
 
         return results
 
@@ -333,6 +340,7 @@ class PSI4_driver(QM_driver):
         self.molecule = mol
 
         self.psi4_geom = ''
+        self.final_energy = 0.0
     
     def create_input(self) -> None:
         """ Method to create the Psi4 input file
@@ -408,6 +416,8 @@ class PSI4_driver(QM_driver):
                             molecule=calc_geom,
                             return_wfn=True)
         
+        self.final_energy = e
+        
         psi4.oeprop(wfn,
                     'MULLIKEN_CHARGES',
                     'LOWDIN_CHARGES',
@@ -437,6 +447,8 @@ class PSI4_driver(QM_driver):
         results['Geometry'].read_xyz(os.path.join(wd, 'geometry.xyz'))
         # Creating an empty dictionary for the charges
         results['Charges'] = {}
+        # Adding the final energy
+        results['Final Energy'] = self.final_energy
 
         # Parse the results
         with open(out, 'r') as f:
@@ -449,7 +461,7 @@ class PSI4_driver(QM_driver):
             if ('Total Energy' in l and
                 'Computation Completed' in data[i+2]):
                 temp = l.split()
-                results['Energy[SPE]'] = float(temp[3])
+                results['Energy[SCF]'] = float(temp[3])
 
             # Parse the orbital energies
             if 'Orbital Energies [Eh]' in l:
