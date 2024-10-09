@@ -156,6 +156,14 @@ def test_molecule_center_of_mass(methane_molecule):
 
     assert sum(mol1.get_center_of_mass()) == 0.0
 
+def test_molecule_get_molecular_volume(methane_molecule):
+
+    mol1, atoms1 = methane_molecule
+
+    vol = mol1.get_molecular_volume(5000, 10)
+
+    assert pytest.approx(vol, 0.015) == 6.5
+
 def test_molecule_remove_atoms(methane_molecule):
     
     mol1, atoms1 = methane_molecule

@@ -5,7 +5,7 @@ import warnings          # To throw warnings instead of raising errors
 import numpy as np       # To do basic scientific computing
 import pandas as pd      # To manage tables and databases
 from pathlib import Path # To locate files in the file system
-from multiprocessing import Pool # To parallelize jobs
+from multiprocessing import Pool, Process, Manager # To parallelize jobs
 import scipy.constants as cts # Universal constants
 # To be able to construct rotation matrices
 from scipy.spatial.transform import Rotation as R
@@ -65,6 +65,7 @@ class Molecule(object):
         self.dihedrals = []
         self.mol_weight = 0.0
         self.charge = 0.0
+        self.volume = 0.0
 
     def __repr__(self) -> str:
         """ Method to represent a molecule
@@ -278,6 +279,113 @@ class Molecule(object):
             Number of atoms in the molecule.
         """
         return len(self.atoms)
+    
+    def __montecarlo_volume(self,
+                            pid : int,
+                            return_dict : dict,
+                            dots : int = 1000) -> None:
+        """ Method to evaluate the molecular volume via Monte Carlo
+
+        Parameters
+        ----------
+        pid : int
+            Process ID
+        return_dict : dict
+            Dictionary to store the results
+        dots : int
+            Number of dots to generate
+        """
+        # Get the limits of the molecule
+        lims = self.get_limits()
+        box_volume = lims['X'][2] * lims['Y'][2] * lims['Z'][2]
+
+        # Random number generator
+        rng = np.random.default_rng()
+        
+        # Generate random coordinates
+        x = rng.random(dots)
+        y = rng.random(dots)
+        z = rng.random(dots)
+
+        hits = 0
+        for j in range(dots):
+
+            # Build the dot
+            dot = np.array([x[j] * lims['X'][2],
+                            y[j] * lims['Y'][2],
+                            z[j] * lims['Z'][2]])
+            dot += np.array([lims['X'][0], lims['Y'][0], lims['Z'][0]])
+            
+            # Iterate over all atoms
+            for a in self.atoms:
+
+                # Compute distance between the dot and the atom
+                distance = np.linalg.norm(dot - a.get_coordinates())
+
+                # If the distance is less than the radius of the atom
+                if distance < a.radius:
+                    hits += 1
+                    break
+        
+        # Compute the relative volume of the molecule as the
+        # ratio of (dots - hits) to the number of dots
+        ratio = hits / dots
+
+        return_dict[pid] = box_volume * ratio
+    
+    def get_molecular_volume(self,
+                             dots : int = 1000,
+                             iterations : int = 10,
+                             force_recalculation : bool = False) -> float:
+        """ Method to get the volume of the molecule
+
+        The method will compute the volume of the molecule using
+        a MonteCarlo approach.
+
+        Parameters
+        ----------
+        dots : int
+            Number of dots to be used in the MonteCarlo method
+        iterations : int
+            Number of iterations to be used in the MonteCarlo method
+        force_recalculation : bool
+            Force the recalculation of the volume
+
+        Returns
+        -------
+        self.volume : float
+            Volume of the molecule
+        """
+        if force_recalculation or self.volume == 0.0:
+            # If < 3 iterations are used, the volume is computed in serial
+            if iterations > 2:
+                # Split the task accross the number of cores
+
+                # Prepare a list of processes
+                processes = []
+                # Set a process manager to get the results
+                manager = Manager()
+                # Initialize a dictionary for the results
+                return_dict = manager.dict()
+                # Add each process to the list
+                for i in range(iterations):
+                    processes.append(Process(target=self.__montecarlo_volume,
+                                            args=(i, return_dict, dots)))
+                # Start the processes
+                [t.start() for t in processes]
+                # Join the processes
+                [t.join() for t in processes]
+                # Get the results
+                mol_vols = list(return_dict.values())
+            else:
+                # Initialize a list for the results
+                mol_vols = []
+                # Compute the volume in serial
+                for i in range(iterations):
+                    mol_vols.append(self.__montecarlo_volume(dots))
+            self.volume = np.round(np.mean(mol_vols), 3)
+
+        return self.volume
     
     def get_distance_matrix(self) -> np.ndarray:
         """ Method to get the distances between pairs of atoms

@@ -18,6 +18,7 @@ pte_file = os.path.join(here, "data", "PubChemElements_all.csv")
 periodic_data = pd.read_csv(pte_file)
 PERIODIC_TABLE = periodic_data.set_index("Symbol")
 all_symbols = set(PERIODIC_TABLE.index.to_list())
+BOHR = 1 / (cts.physical_constants["Bohr radius"][0] * 1e10)
 
 def fibonacci_grid_shell(center : np.ndarray,
                          radius : float = 1.0,
@@ -145,6 +146,7 @@ class Atom(object):
         self.coords = np.array([x,y,z])
         self.charge = charge
         self.flag = flag
+        self.radius = (PERIODIC_TABLE.loc[self.element, "AtomicRadius"] / BOHR) / 100
 
     def __repr__(self) -> str:
         """ Atom representation method
