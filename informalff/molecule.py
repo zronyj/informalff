@@ -5,6 +5,7 @@ import warnings          # To throw warnings instead of raising errors
 import numpy as np       # To do basic scientific computing
 import pandas as pd      # To manage tables and databases
 from pathlib import Path # To locate files in the file system
+from functools import lru_cache # To cache functions
 from multiprocessing import Pool, Process, Manager # To parallelize jobs
 import scipy.constants as cts # Universal constants
 # To be able to construct rotation matrices
@@ -333,14 +334,14 @@ class Molecule(object):
 
         return_dict[pid] = box_volume * ratio
     
+    @lru_cache(maxsize=1)
     def get_molecular_volume(self,
                              dots : int = 1000,
-                             iterations : int = 10,
-                             force_recalculation : bool = False) -> float:
+                             iterations : int = 10) -> float:
         """ Method to get the volume of the molecule
 
         The method will compute the volume of the molecule using
-        a MonteCarlo approach.
+        a Monte Carlo approach.
 
         Parameters
         ----------
@@ -348,42 +349,39 @@ class Molecule(object):
             Number of dots to be used in the MonteCarlo method
         iterations : int
             Number of iterations to be used in the MonteCarlo method
-        force_recalculation : bool
-            Force the recalculation of the volume
 
         Returns
         -------
         self.volume : float
             Volume of the molecule
         """
-        if force_recalculation or self.volume == 0.0:
-            # If < 3 iterations are used, the volume is computed in serial
-            if iterations > 2:
-                # Split the task accross the number of cores
+        # If < 3 iterations are used, the volume is computed in serial
+        if iterations > 2:
+            # Split the task accross the number of cores
 
-                # Prepare a list of processes
-                processes = []
-                # Set a process manager to get the results
-                manager = Manager()
-                # Initialize a dictionary for the results
-                return_dict = manager.dict()
-                # Add each process to the list
-                for i in range(iterations):
-                    processes.append(Process(target=self.__montecarlo_volume,
-                                            args=(i, return_dict, dots)))
-                # Start the processes
-                [t.start() for t in processes]
-                # Join the processes
-                [t.join() for t in processes]
-                # Get the results
-                mol_vols = list(return_dict.values())
-            else:
-                # Initialize a list for the results
-                mol_vols = []
-                # Compute the volume in serial
-                for i in range(iterations):
-                    mol_vols.append(self.__montecarlo_volume(dots))
-            self.volume = np.round(np.mean(mol_vols), 3)
+            # Prepare a list of processes
+            processes = []
+            # Set a process manager to get the results
+            manager = Manager()
+            # Initialize a dictionary for the results
+            return_dict = manager.dict()
+            # Add each process to the list
+            for i in range(iterations):
+                processes.append(Process(target=self.__montecarlo_volume,
+                                        args=(i, return_dict, dots)))
+            # Start the processes
+            [t.start() for t in processes]
+            # Join the processes
+            [t.join() for t in processes]
+            # Get the results
+            mol_vols = list(return_dict.values())
+        else:
+            # Initialize a list for the results
+            mol_vols = []
+            # Compute the volume in serial
+            for i in range(iterations):
+                mol_vols.append(self.__montecarlo_volume(dots))
+        self.volume = np.round(np.mean(mol_vols), 3)
 
         return self.volume
     

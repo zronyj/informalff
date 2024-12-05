@@ -289,13 +289,6 @@ class Collection(object):
 
         return collection_center
 
-    #TODO: Re-write the get_limits function to compute the limits not just
-    #      based on the coordinates of the atoms that are further away,
-    #      but based on:
-    #      - The average coordinates of all the atoms from the molecules
-    #        low/high COM in the collection
-    #      - The coordinates of the furthest away atom +- a factor, and
-    #        then rounding that number up
     @lru_cache(maxsize=3)
     def get_limits(self,
                    option : str = "edges",
