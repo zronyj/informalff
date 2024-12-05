@@ -5,6 +5,7 @@ Unit and regression tests for the collection module of the informalff package.
 # Import this package, (test suite), and other packages as needed
 import numpy as np
 import pytest
+import os
 
 import informalff
 
@@ -22,6 +23,47 @@ def methane_molecule():
     mol.add_atoms(atoms)
 
     return mol, atoms
+
+@pytest.fixture
+def water_box():
+
+    coll = informalff.Collection("water box")
+
+    here = os.path.realpath(__file__)
+    here = os.path.dirname(here)
+    molecule_path = os.path.join(here, "mols", "water.pdb")
+
+    with open(molecule_path, "r") as f:
+        data = f.readlines()
+
+    atoms = []
+    current_mol = informalff.Molecule("WAT0")
+    for l in data:
+        temp = l.split()
+        temp = [c for c in temp if c != ""]
+
+        if temp[0] == "HETATM":
+            mol_name = f"{temp[3]}{temp[4]}"
+            if mol_name != current_mol.name:
+                current_mol.add_atoms(*atoms)
+                coll.add_molecule(current_mol.name, current_mol)
+                current_mol = informalff.Molecule(mol_name)
+                atoms = []
+            
+            atoms.append(informalff.Atom(
+                temp[10],
+                float(temp[5]),
+                float(temp[6]),
+                float(temp[7]),
+                float(temp[9])
+                )
+            )
+        else:
+            current_mol.add_atoms(*atoms)
+            coll.add_molecule(current_mol.name, current_mol)
+            current_mol = informalff.Molecule(mol_name)
+            break
+    return coll
 
 def test_collection_get_center():
 
@@ -66,3 +108,72 @@ def test_collection_detect_collisions(methane_molecule):
 
     with pytest.warns(UserWarning, match="found between molecules"):
         assert coll.detect_collisions()
+
+def test_get_total_mass(water_box):
+
+    coll = water_box
+
+    mass_waters = len(coll.molecules) * 18.015
+
+    total_mass = coll.get_total_mass()
+
+    prec = 1e-8
+
+    assert pytest.approx(total_mass, prec) == pytest.approx(mass_waters, prec)
+
+def test_collection_get_limits_edges(water_box):
+
+    coll = water_box
+
+    for mol_id, mol in coll.molecules.items():
+        for a in mol.atoms:
+            print(a)
+
+    limits = coll.get_limits("edges")
+
+    precision = 0.25
+
+    assert pytest.approx(limits["X"][0], precision) == -10.0
+    assert pytest.approx(limits["X"][1], precision) ==  10.0
+    assert pytest.approx(limits["Y"][0], precision) == -10.0
+    assert pytest.approx(limits["Y"][1], precision) ==  10.0
+    assert pytest.approx(limits["Z"][0], precision) == -10.0
+    assert pytest.approx(limits["Z"][1], precision) ==  10.0
+
+def test_collection_get_limits_factor(water_box):
+
+    coll = water_box
+
+    for mol_id, mol in coll.molecules.items():
+        for a in mol.atoms:
+            print(a)
+
+    limits = coll.get_limits("factor", factor=2.5)
+
+    precision = 0.2
+
+    assert pytest.approx(limits["X"][0], precision) == -10.0
+    assert pytest.approx(limits["X"][1], precision) ==  10.0
+    assert pytest.approx(limits["Y"][0], precision) == -10.0
+    assert pytest.approx(limits["Y"][1], precision) ==  10.0
+    assert pytest.approx(limits["Z"][0], precision) == -10.0
+    assert pytest.approx(limits["Z"][1], precision) ==  10.0
+
+def test_collection_get_limits_scan(water_box):
+
+    coll = water_box
+
+    for mol_id, mol in coll.molecules.items():
+        for a in mol.atoms:
+            print(a)
+
+    limits = coll.get_limits("scan")
+
+    precision = 0.175
+
+    assert pytest.approx(limits["X"][0], precision) == -10.0
+    assert pytest.approx(limits["X"][1], precision) ==  10.0
+    assert pytest.approx(limits["Y"][0], precision) == -10.0
+    assert pytest.approx(limits["Y"][1], precision) ==  10.0
+    assert pytest.approx(limits["Z"][0], precision) == -10.0
+    assert pytest.approx(limits["Z"][1], precision) ==  10.0
