@@ -142,11 +142,16 @@ class Atom(object):
         else:
             raise TypeError((f"Atom.__init__() The symbol {element} does not "
                 "correspond to any element in the Periodic Table."))
+        
+        radius = PERIODIC_TABLE.loc[self.element, "AtomicRadius"]
+        mass = PERIODIC_TABLE.loc[self.element, "AtomicMass"]
 
         self.coords = np.array([x,y,z])
         self.charge = charge
         self.flag = flag
-        self.radius = (PERIODIC_TABLE.loc[self.element, "AtomicRadius"] / BOHR) / 100
+        self.radius = (radius / BOHR) / 100
+        self.mass = mass
+        self.bonded_atoms = []
 
     def __repr__(self) -> str:
         """ Atom representation method
@@ -271,6 +276,16 @@ class Atom(object):
                 grid[q] = grid[q] + temp_grid[q]
 
         return grid
+    
+    def get_bonded_atoms(self) -> list:
+        """ Method to get the atom's first partners
+
+        Returns
+        -------
+        bonded_atoms : list
+            A list with the ID of the bonded atoms
+        """
+        return self.bonded_atoms
 
 if __name__ == "__main__":
     # Do something if this file is invoked on its own

@@ -1,19 +1,249 @@
-import os                # To navigate the file system
-import copy              # To copy objects
-import json              # To parse json files
-import warnings          # To throw warnings instead of raising errors
-import numpy as np       # To do basic scientific computing
-import pandas as pd      # To manage tables and databases
-from pathlib import Path # To locate files in the file system
-from functools import lru_cache # To cache functions
+import os                                          # To navigate the file system
+import copy                                        # To copy objects
+import json                                        # To parse json files
+import warnings                                    # To throw warnings instead of raising errors
+import numpy as np                                 # To do basic scientific computing
+import pandas as pd                                # To manage tables and databases
+from pathlib import Path                           # To locate files in the file system
+from functools import lru_cache                    # To cache functions
 from multiprocessing import Pool, Process, Manager # To parallelize jobs
-import scipy.constants as cts # Universal constants
-# To be able to construct rotation matrices
-from scipy.spatial.transform import Rotation as R
+import scipy.constants as cts                      # Universal constants
+from scipy.spatial.transform import Rotation as R  # To be able to construct rotation matrices
 
 from .atom import Atom, PERIODIC_TABLE, fibonacci_grid_shell
 
 BOHR = 1 / (cts.physical_constants["Bohr radius"][0] * 1e10)
+
+# ------------------------------------------------------- #
+#                The Molecular Graph Class                #
+# ------------------------------------------------------- #
+
+class MolecularGraph:
+    """ Class to represent the graph of a molecule 
+
+    This class is used to represent the graph of a molecule
+    by considering each atom with its id in a dictionary,
+    and adding several methods for the analysis of the graph.
+
+    Attributes
+    ----------
+    atoms : list
+        A list with all the atoms in the molecule
+    bonds : list of list
+        A list with all the pairs of atoms defining the bonds of the molecule
+    graph : dict
+        A dictionary with the connectivity of the molecule
+    """
+    def __init__(self, atoms : int, bonds : list):
+        """
+        MolecularGraph constructor method
+        
+        Parameters
+        ----------
+        atoms : int
+            The number of atoms in the molecule
+        bonds : list of list
+            A list of pairs of atoms defining the bonds of the molecule
+        """
+        self.atoms = list(range(atoms))
+        self.bonds = bonds
+
+        # Initialize the dictionary for the graph
+        self.graph = {a : [] for a in self.atoms}
+
+        # Iterate over all bonds
+        for b in self.bonds:
+            self.graph[b[0]].append(b[1])
+            self.graph[b[1]].append(b[0])
+        
+        # Iterate over all atoms
+        for a in self.atoms:
+            # Remove any duplicates
+            self.graph[a] = set(self.graph[a])
+
+    def get_neighbors(self, atom : int) -> list:
+        """ Method to get the neighbors of a given atom
+        
+        Parameters
+        ----------
+        atom : int
+            The atom
+        
+        Returns
+        -------
+        neighbors : list
+            The neighbors of the atom"""
+        # Return the neighbors
+        return list(self.graph[atom])
+    
+    def get_branch(self,
+                   atom1 : int,
+                   atom2 : int,
+                   depth : int,
+                   path : list = []) -> list:
+        """ Method to get the molecular branch stemming from two atoms
+
+        Parameters
+        ----------
+        atom1 : int
+            The first atom
+        atom2 : int
+            The second atom
+        depth : int
+            The depth of the branch (how many bonds away should it be)
+        path : list
+            The path that has been walked already
+
+        Returns
+        -------
+        branch : list
+            Tree structure of atoms in the branch"""
+        # Check that atom1 and atom2 are not the same
+        if atom1 == atom2:
+            raise ValueError("MolecularGraph.get_branch() The two atoms"
+                             " should be different!")
+        
+        # Check that atom1 and atom2 are in the molecule
+        if (atom1 not in list(range(len(self.atoms))) or
+                atom2 not in list(range(len(self.atoms)))):
+            raise ValueError("MolecularGraph.get_branch() The two atoms"
+                             " should be in the molecule!")
+
+        # If no bonds are found, something is wrong
+        if len(self.bonds) == 0:
+            raise ValueError("MolecularGraph.get_branch() No bonds found!")
+
+        # Create a list for the next level
+        next_level = [a for a in self.get_neighbors(atom2) if a != atom1]
+
+        # Add the current atom to the path
+        if len(path) == 0:
+            path.append(atom2)
+
+        # If the depth is 0 or if the next level is empty, return emptiness
+        if depth == 0 or len(next_level) == 0:
+            return path
+
+        # If the depth is greater than 0, return the next level
+        else:
+            # Advance to the next level of neighbors
+            for nl in next_level:
+                # If the neighbor is already in the path, return the path
+                if nl in path:
+                    return path
+                # If the neighbor is not in the path, continue the search
+                else:
+                    path.append(nl)
+                    path = self.get_branch(atom2, nl, depth - 1, path)
+            return list(set(path))
+    
+    def get_graph(self) -> dict:
+        """ Method to get the graph of the molecule
+        
+        Returns
+        -------
+        graph : dict
+            The graph of the molecule as a dictionary"""
+        return self.graph
+    
+    def find_rings(self) -> list:
+        """ Method to find the rings in the molecule
+        
+        Detects if there are rings in the molecule, and
+        keeps track of them in a dictionary
+
+        Returns
+        -------
+        rings : dict
+            The rings of the molecule as a dictionary"""
+        path = []
+        rings = {}
+        pass
+
+    def shortest_path(self,
+                    atom1 : int,
+                    atom2 : int,
+                    path : list = []) -> list:
+        """Method to find shortest path between two atoms
+        
+        Method to find the path with the least amount of
+        connecting bonds between two atoms in the molecule
+        
+        Parameters
+        ----------
+        atom1 : int
+            The starting atom
+        atom2 : int
+            The finishing atom
+        path : list
+            The path that has been walked already
+
+        Returns
+        -------
+        path : list
+            The path with further steps in the molecule"""
+        # Check that atom1 and atom2 are not the same
+        if atom1 == atom2:
+            raise ValueError("MolecularGraph.shortest_path() The two atoms"
+                             " should be different!")
+        
+        # Check that atom1 and atom2 are in the molecule
+        if (atom1 not in list(range(len(self.atoms))) or
+                atom2 not in list(range(len(self.atoms)))):
+            raise ValueError("MolecularGraph.shortest_path() The two atoms"
+                             " should be in the molecule!")
+
+        # If no bonds are found, something is wrong
+        if len(self.bonds) == 0:
+            raise ValueError("MolecularGraph.shortest_path() No bonds found!")
+
+        # Add the current atom to the path
+        if len(path) == 0:
+            path.append(atom1)
+
+        # Create a list for the next level
+        next_level = [a for a in self.get_neighbors(atom1) if a not in path]
+
+        # If there's nothing in the next level, return the path without this
+        # last atom
+        if len(next_level) == 0:
+            return path[:-1]
+
+        else:
+            # The current path has a length of
+            until_now = len(path)
+            new_paths = []
+
+            # Advance to the next level of neighbors
+            for nl in next_level:
+                # If the neighbor is already in the path, return the path
+                if nl in path:
+                    continue
+                # If the neighbor is the finishing atom, return the path
+                elif nl == atom2:
+                    new_paths.append(path + [nl])
+                # If the neighbor is not in the path, continue the search
+                else:
+                    temp_path = self.shortest_path(nl, atom2, path + [nl])
+                    if temp_path[-1] == atom2:
+                        new_paths.append(temp_path)
+            
+            if len(new_paths) > 0:
+                # Sort the paths by the shortest one
+                new_paths = sorted(new_paths, key=len)
+                # Keep only the paths with the same short length
+                shortest = len(new_paths[0])
+                new_paths = [p for p in new_paths if len(p) == shortest]
+                # Sort the paths by the sum of number of atom
+                new_paths = sorted(new_paths, key=sum)
+                return new_paths[0]
+            else:
+                # This path didn't lead to the finishing atom, remove the last
+                return path[:until_now - 1]
+    
+    # TODO:
+    # - Add method to detect rings
+    # - Add method to find the longest chain in the molecule
 
 # ------------------------------------------------------- #
 #                   The Molecule Class                    #
@@ -67,6 +297,7 @@ class Molecule(object):
         self.mol_weight = 0.0
         self.charge = 0.0
         self.volume = 0.0
+        self.graph = None
 
     def __repr__(self) -> str:
         """ Method to represent a molecule
@@ -249,8 +480,7 @@ class Molecule(object):
         """
         self.mol_weight = 0.0
         for a in self.atoms:
-            symbol = a.element
-            self.mol_weight += PERIODIC_TABLE.loc[symbol, "AtomicMass"]
+            self.mol_weight += a.mass
 
         return True
 
@@ -385,6 +615,41 @@ class Molecule(object):
 
         return self.volume
     
+    def _set_bonded_atoms(self) -> None:
+        """ Method to set the bonded atoms of the molecule to its atoms
+
+        This method will assign the bonded atoms of the molecule
+        to each of the atoms
+        """
+        if self.graph is None:
+            self.get_distance_matrix()
+               
+        # Iterate over all possible bonds
+        for ia, pb in self.graph.get_graph().items():
+            # Cases of 1, 2 or 3 bonded atoms (i.e. chirality doesn't matter)
+            if len(pb) < 4:
+                self.atoms[ia].bonded_atoms = list(pb)
+            # Chirality could matter
+            else:
+                # TODO:
+                # - Get the atomic geometry by number of neighbors
+                # - Decide case based on geometry
+                # - Get the symbols for all neighbors
+                # - Count the number of each symbol
+                # - If symbol = H, F, Cl or Br, and number of symbol = neighbors - 2, add the bonded atoms
+                # Get the masses of the bonded atoms
+                masses = {}
+                for j, ja in enumerate(pb):
+                    masses[j] = self.atoms[ja].mass
+                if set(masses.values()) != list(masses.values()):
+                    pass
+                # Sort the masses
+                sorted_masses = {}
+                for k, v in sorted(masses.items(), key=lambda x: x[1]):
+                    sorted_masses[k] = v
+                
+                
+
     def get_distance_matrix(self) -> np.ndarray:
         """ Method to get the distances between pairs of atoms
 
@@ -412,11 +677,11 @@ class Molecule(object):
                     # Compute distance
                     dist_mat[i][j] = self.get_distance(i, j)
                     # Atomic radius 1
-                    d1 = PERIODIC_TABLE.loc[ai.element, "AtomicRadius"] / BOHR
+                    d1 = ai.radius
                     # Atomic radius 2
-                    d2 = PERIODIC_TABLE.loc[aj.element, "AtomicRadius"] / BOHR
+                    d2 = aj.radius
                     # Maximal bond distance
-                    max_dist = (d1 + d2) / 100
+                    max_dist = d1 + d2
                     # If the position of both atoms is within bonding distance
                     if dist_mat[i][j] <= max_dist:
                         # Add them to a temporary list
@@ -426,6 +691,8 @@ class Molecule(object):
         # Re-create the bond table for the molecule
         for b in set(bonds):
             self.bonds.append([ int(i) for i in b.split(",") ])
+        
+        self.graph = MolecularGraph(num_atoms, self.bonds)
 
         return dist_mat
     
@@ -482,14 +749,16 @@ class Molecule(object):
                     # Produce a list with the atoms in the angle
                     temp_a = b1 + [ b2[ (b2.index(b1[1]) + 1) % 2 ] ]
                     # Check that the angle hasn't been added already
-                    if temp_a not in self.angles and temp_a[::-1] not in self.angles:
+                    if (temp_a not in self.angles and
+                            temp_a[::-1] not in self.angles):
                         self.angles.append(temp_a)
                  # Only one of the bonded atoms should be in the other bond
                 if (b1[0] in b2) and not (b1[1] in b2):
                     # Produce a list with the atoms in the angle
                     temp_b = [ b2[ (b2.index(b1[0]) + 1) % 2 ] ] + b1
                     # Check that the angle hasn't been added already
-                    if temp_b not in self.angles and temp_b[::-1] not in self.angles:
+                    if (temp_b not in self.angles and
+                            temp_b[::-1] not in self.angles):
                         self.angles.append(temp_b)
 
         return self.angles
@@ -1031,9 +1300,10 @@ class Molecule(object):
         centro = np.array([0, 0, 0], dtype=np.float64)
 
         # Iterate over all atoms
-        for a in atoms:
+        for ia, a in enumerate(atoms):
             # Weight the coordinates by the mass and add them to the center
-            centro += np.array([*a[1:4]]) * PERIODIC_TABLE.loc[a[0], "AtomicMass"]
+            atom_coords = np.array([*a[1:4]])
+            centro += atom_coords * self.atoms[ia].mass
 
         # Divide the center by the molecular mass
         centro *= (1 / M)
@@ -1201,8 +1471,12 @@ XYZ file of atom selection from molecule: {self.name} - created by InformalFF
             id_h = q_trsp[q].index(high)
 
             # Get the atoms' atomic radius to pad the molecule
-            pad_i = PERIODIC_TABLE.loc[q_trsp['e'][id_l], "AtomicRadius"] / BOHR
-            pad_a = PERIODIC_TABLE.loc[q_trsp['e'][id_h], "AtomicRadius"] / BOHR
+            pad_i = PERIODIC_TABLE.loc[q_trsp['e'][id_l], "AtomicRadius"]
+            pad_a = PERIODIC_TABLE.loc[q_trsp['e'][id_h], "AtomicRadius"]
+
+            # From Bohr to pm
+            pad_i /= BOHR
+            pad_a /= BOHR
 
             # From pm to Angstrom
             pad_i /= 100

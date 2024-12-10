@@ -40,6 +40,65 @@ def methanol_molecule():
 
     return mol, atoms
 
+@pytest.fixture
+def eugenol_graph():
+    atoms = 24
+    bonds = [
+        [0, 1],
+        [0, 3],
+        [0, 18],
+        [1, 2],
+        [3, 4],
+        [3, 5],
+        [5, 6],
+        [5, 7],
+        [7, 8],
+        [7, 16],
+        [8, 9],
+        [8, 10],
+        [8, 11],
+        [11, 12],
+        [11, 13],
+        [13, 14],
+        [13, 15],
+        [16, 17],
+        [16, 18],
+        [18, 19],
+        [19, 20],
+        [20, 21],
+        [20, 22],
+        [20, 23]]
+    
+    return atoms, bonds
+
+def test_molecular_graph_create():
+
+    atoms = 3
+    bonds = [
+        [0, 1],
+        [0, 2]
+    ]
+
+    water_graph = informalff.MolecularGraph(atoms, bonds)
+    hs = water_graph.get_neighbors(0)
+    assert hs == [1, 2]
+
+def test_molecular_graph_get_branch(eugenol_graph):
+
+    atoms, bonds = eugenol_graph
+    grap = informalff.MolecularGraph(atoms, bonds)
+    branch = grap.get_branch(7, 8, 3)
+
+    assert branch == [8, 9, 10, 11, 12, 13, 14, 15]
+
+def test_molecular_graph_shortest_path(eugenol_graph):
+
+    atoms, bonds = eugenol_graph
+    grap = informalff.MolecularGraph(atoms, bonds)
+    branch = grap.shortest_path(8, 1)
+
+    assert branch == [8, 7, 5, 3, 0, 1]
+
 def test_molecule_create():
 
     h1 = informalff.Atom(element="H")

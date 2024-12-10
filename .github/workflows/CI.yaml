@@ -22,7 +22,7 @@ jobs:
     strategy:
       matrix:
         os: [macOS-latest, ubuntu-latest, windows-latest]
-        python-version: [3.8, 3.9, "3.10"]
+        python-version: [3.8, 3.9, 3.10, 3.11]
 
     steps:
       - uses: actions/checkout@v3
@@ -35,7 +35,7 @@ jobs:
           ulimit -a
 
       # More info on options: https://github.com/marketplace/actions/provision-with-micromamba
-      - uses: mamba-org/provision-with-micromamba@main
+      - uses: mamba-org/setup-micromamba@v2
         with:
           environment-file: devtools/conda-envs/test_env.yaml
           environment-name: test

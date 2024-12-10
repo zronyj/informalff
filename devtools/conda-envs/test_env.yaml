@@ -19,6 +19,6 @@ dependencies:
   - sympy
 
     # Pip-only installs
-  #- pip:
-  #  - codecov
+  - pip:
+   - codecov
 
