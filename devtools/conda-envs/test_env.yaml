@@ -15,5 +15,3 @@ dependencies:
   - scipy
   - sympy
   - matplotlib
-  - pip:
-    #- codecov
