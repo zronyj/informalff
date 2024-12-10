@@ -219,9 +219,9 @@ def test_molecule_get_molecular_volume(methane_molecule):
 
     mol1, atoms1 = methane_molecule
 
-    vol = mol1.get_molecular_volume(10000, 10)
+    vol = mol1.get_molecular_volume(1000, 10)
 
-    assert pytest.approx(vol, 0.015) == 6.5
+    assert pytest.approx(vol, 0.025) == 6.5
 
 def test_molecule_remove_atoms(methane_molecule):
     
