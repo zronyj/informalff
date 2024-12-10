@@ -1,14 +1,11 @@
 name: test
 channels:
-
   - conda-forge
-
   - defaults
 dependencies:
     # Base depends
   - python
   - pip
-
     # Testing
   - pytest
   - pytest-cov
@@ -17,8 +14,6 @@ dependencies:
   - pandas
   - scipy
   - sympy
-
-    # Pip-only installs
+  - matplotlib
   - pip:
-   - codecov
-
+    - codecov
