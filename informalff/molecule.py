@@ -511,7 +511,7 @@ class Molecule(object):
         """
         return len(self.atoms)
     
-    def __montecarlo_volume(self,
+    def _montecarlo_volume(self,
                             pid : int,
                             return_dict : dict,
                             dots : int = 1000) -> None:
@@ -597,7 +597,7 @@ class Molecule(object):
             return_dict = manager.dict()
             # Add each process to the list
             for i in range(iterations):
-                processes.append(Process(target=self.__montecarlo_volume,
+                processes.append(Process(target=self._montecarlo_volume,
                                         args=(i, return_dict, dots)))
             # Start the processes
             [t.start() for t in processes]
@@ -610,7 +610,7 @@ class Molecule(object):
             mol_vols = []
             # Compute the volume in serial
             for i in range(iterations):
-                mol_vols.append(self.__montecarlo_volume(dots))
+                mol_vols.append(self._montecarlo_volume(dots))
         self.volume = np.round(np.mean(mol_vols), 3)
 
         return self.volume
