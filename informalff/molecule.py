@@ -146,19 +146,95 @@ class MolecularGraph:
             The graph of the molecule as a dictionary"""
         return self.graph
     
-    def find_rings(self) -> list:
+    def _find_rings(self,
+                   path : list = [],
+                   rings : list = []) -> list:
         """ Method to find the rings in the molecule
         
         Detects if there are rings in the molecule, and
-        keeps track of them in a dictionary
+        keeps track of them in a list.
 
         Returns
         -------
+        path : list
+            The path that has been walked already
         rings : dict
             The rings of the molecule as a dictionary"""
-        path = []
-        rings = {}
-        pass
+        
+        # Check if the path is empty
+        if len(path) == 0:
+            # If it is, start with the first atom
+            path = [0]
+
+            # Create a list for the next level
+            next_level = self.get_neighbors(path[-1])
+        else:
+            # Create a list for the next level (excluding the last atom)
+            next_level = []
+            for a in self.get_neighbors(path[-1]):
+                if a != path[-2]:
+                    next_level.append(a)
+
+        # If there's nothing in the next level, return the path without this
+        # last atom
+        if len(next_level) == 0:
+            return path[:-1], rings
+
+        else:
+            # The current path has a length of
+            until_now = len(path)
+
+            # Advance to the next level of neighbors
+            for nl in next_level:
+                # If the neighbor is already in the path, return the path
+                if nl in path and nl != path[-1]:
+                    starting_index = path.index(nl)
+                    new_ring = path[starting_index:until_now]
+                    new_ring.sort()
+                    if new_ring not in rings:
+                        rings.append(new_ring)
+                # If the neighbor is not in the path, continue the search
+                else:
+                    path, rings = self._find_rings(path + [nl], rings)
+            
+            return path[:until_now - 1], rings
+    
+    def get_rings(self) -> list:
+        """ Method to get the rings in the molecule
+
+        This is a much more refined method to find the
+        actual rings in the molecule, considering that
+        it checks whether a ring is a subset of another.
+        This leads to a removal of the potential bigger
+        rings.
+
+        Example: A naphtalene molecule has two rings, but
+        the combination of both is, topologically, also
+        a ring. This method will remove the bigger ring.
+        
+        Returns
+        -------
+        rings : list
+            The rings of the molecule as a list"""
+        
+        # Find the rings in the molecule
+        _, rings = self._find_rings([], [])
+
+        # Turn the rings into sets
+        sets = [set(r) for r in rings]
+
+        # Remove sets that are supersets of other sets
+        for s1 in sets:
+            for s2 in sets:
+                if s1 != s2 and s1.issubset(s2):
+                    sets.remove(s2)
+
+        # Small rings only, as lists
+        list_rings = [list(s) for s in sets]
+        list_rings.sort()
+
+        # Return the rings
+        return list_rings
 
     def shortest_path(self,
                     atom1 : int,
@@ -181,7 +257,7 @@ class MolecularGraph:
         Returns
         -------
         path : list
-            The path with further steps in the molecule"""
+            The path with least steps in the molecule"""
         # Check that atom1 and atom2 are not the same
         if atom1 == atom2:
             raise ValueError("MolecularGraph.shortest_path() The two atoms"
@@ -242,7 +318,6 @@ class MolecularGraph:
                 return path[:until_now - 1]
     
     # TODO:
-    # - Add method to detect rings
     # - Add method to find the longest chain in the molecule
 
 # ------------------------------------------------------- #

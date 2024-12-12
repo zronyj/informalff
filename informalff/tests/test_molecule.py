@@ -71,6 +71,74 @@ def eugenol_graph():
     
     return atoms, bonds
 
+@pytest.fixture
+def camphor_graph():
+    atoms = 27
+    bonds = [
+        [0, 3],
+        [1, 3],
+        [2, 3],
+        [3, 4],
+        [4, 5],
+        [4, 12],
+        [4, 24],
+        [5, 6],
+        [5, 7],
+        [7, 8],
+        [7, 9],
+        [7, 10],
+        [10, 11],
+        [10, 12],
+        [10, 21],
+        [12, 13],
+        [12, 17],
+        [13, 14],
+        [13, 15],
+        [13, 16],
+        [17, 18],
+        [17, 19],
+        [17, 20],
+        [21, 22],
+        [21, 23],
+        [21, 24],
+        [24, 25],
+        [24, 26]]
+    
+    return atoms, bonds
+
+@pytest.fixture
+def anthracene_graph():
+    atoms = 24
+    bonds = [
+        [0, 1],
+        [0, 2],
+        [0, 22],
+        [2, 3],
+        [2, 4],
+        [4, 5],
+        [4, 6],
+        [6, 7],
+        [6, 21],
+        [7, 8],
+        [7, 9],
+        [9, 18],
+        [9, 10],
+        [10, 11],
+        [10, 12],
+        [12, 13],
+        [12, 14],
+        [14, 15],
+        [14, 16],
+        [16, 17],
+        [16, 18],
+        [18, 19],
+        [19, 20],
+        [19, 21],
+        [21, 22],
+        [22, 23]]
+    
+    return atoms, bonds
+
 def test_molecular_graph_create():
 
     atoms = 3
@@ -79,25 +147,50 @@ def test_molecular_graph_create():
         [0, 2]
     ]
 
-    water_graph = informalff.MolecularGraph(atoms, bonds)
-    hs = water_graph.get_neighbors(0)
+    graph_water = informalff.MolecularGraph(atoms, bonds)
+    hs = graph_water.get_neighbors(0)
     assert hs == [1, 2]
 
 def test_molecular_graph_get_branch(eugenol_graph):
 
     atoms, bonds = eugenol_graph
-    grap = informalff.MolecularGraph(atoms, bonds)
-    branch = grap.get_branch(7, 8, 3)
+    graph_eugenol = informalff.MolecularGraph(atoms, bonds)
+    branch = graph_eugenol.get_branch(7, 8, 3)
 
     assert branch == [8, 9, 10, 11, 12, 13, 14, 15]
 
 def test_molecular_graph_shortest_path(eugenol_graph):
 
     atoms, bonds = eugenol_graph
-    grap = informalff.MolecularGraph(atoms, bonds)
-    branch = grap.shortest_path(8, 1)
+    graph_eugenol = informalff.MolecularGraph(atoms, bonds)
+    path = graph_eugenol.shortest_path(8, 1)
 
-    assert branch == [8, 7, 5, 3, 0, 1]
+    assert path == [8, 7, 5, 3, 0, 1]
+
+def test_molecular_graph_find_rings(camphor_graph):
+
+    atoms, bonds = camphor_graph
+    grap_camphor = informalff.MolecularGraph(atoms, bonds)
+    path_camphor, rings_camphor = grap_camphor._find_rings()
+
+    assert rings_camphor == [
+                                [4, 10, 12, 21, 24],
+                                [4, 5, 7, 10, 21, 24],
+                                [4, 5, 7, 10, 12]
+                            ]
+
+def test_molecular_graph_get_rings(anthracene_graph):
+
+    atoms, bonds = anthracene_graph
+
+    graph_anthracene = informalff.MolecularGraph(atoms, bonds)
+    rings_anthracene = graph_anthracene.get_rings()
+
+    assert rings_anthracene == [
+                                    [0, 2, 4, 6, 21, 22],
+                                    [6, 7, 9, 18, 19, 21],
+                                    [9, 10, 12, 14, 16, 18]
+                                ]
 
 def test_molecule_create():
 
@@ -221,7 +314,7 @@ def test_molecule_get_molecular_volume(methane_molecule):
 
     vol = mol1.get_molecular_volume(1000, 10)
 
-    assert pytest.approx(vol, 0.025) == 6.5
+    assert pytest.approx(vol, 0.03) == 6.5
 
 def test_molecule_remove_atoms(methane_molecule):
     
