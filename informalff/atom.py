@@ -171,6 +171,27 @@ class Atom(object):
                 f" q(+/-) {self.charge:16.8f} "
                 f" [{'*' if self.flag else ' '}]")
         return text
+    
+    def swap_element(self,
+                      element : str):
+        """ Method to update the Atom's element symbol
+
+        Parameters
+        ----------
+        element : str
+            The atom's element symbol
+        """
+        if element in all_symbols:
+            self.element = element
+        else:
+            raise TypeError((f"Atom.swap_element() The symbol {element} "
+                "does not correspond to any element in the Periodic Table."))
+        
+        radius = PERIODIC_TABLE.loc[self.element, "AtomicRadius"]
+        mass = PERIODIC_TABLE.loc[self.element, "AtomicMass"]
+
+        self.radius = (radius / BOHR) / 100
+        self.mass = mass
 
     def set_coordinates(self,
                         x : float,

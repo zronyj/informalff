@@ -45,6 +45,20 @@ class MolecularGraph:
         bonds : list of list
             A list of pairs of atoms defining the bonds of the molecule
         """
+
+        if atoms < 0:
+            raise ValueError("MolecularGraph.__init__() The number of atoms"
+                             " should be positive!")
+
+        pre_bonds = []
+        for b in bonds:
+            pre_bonds += b
+        
+        pre_bonds = set(pre_bonds)
+        if len(pre_bonds) != atoms:
+            raise ValueError("MolecularGraph.__init__() The number of atoms"
+                             " and the atoms in the bonds do not match!")
+
         self.atoms = list(range(atoms))
         self.bonds = bonds
 
@@ -59,22 +73,62 @@ class MolecularGraph:
         # Iterate over all atoms
         for a in self.atoms:
             # Remove any duplicates
-            self.graph[a] = set(self.graph[a])
+            self.graph[a] = set(sorted(self.graph[a]))
 
-    def get_neighbors(self, atom : int) -> list:
+    def get_neighbors(self,
+                      atom : int,
+                      depth : int = 1) -> list:
         """ Method to get the neighbors of a given atom
         
         Parameters
         ----------
         atom : int
             The atom
+        depth : int
+            How many next neighbors to look for
         
         Returns
         -------
         neighbors : list
             The neighbors of the atom"""
-        # Return the neighbors
-        return list(self.graph[atom])
+
+        if depth == 1:
+            # Return the neighbors
+            return list(self.graph[atom])
+        else:
+            # Initialize the neighbor list
+            neighbors = []
+
+            # Iterate over all neighbors
+            for n in self.graph[atom]:
+
+                # Get the neighbors of the neighbor
+                n_ngbrs = self.get_neighbors(n, depth - 1)
+
+                # Prepare a filtered version of the neighbors
+                # of the neighbor
+                f_neigbors = []
+
+                # Iterate over all neighbors of the neighbor
+                for nn in n_ngbrs:
+
+                    # If it's an integer, check if it's not the source atom
+                    if isinstance(nn, int):
+                        if nn != atom:
+                            f_neigbors.append(nn)
+                    # If it's a dictionary, check if it doesn't contain
+                    # the source atom
+                    else:
+                        if atom not in list(nn.keys()):
+                            f_neigbors.append(nn)
+
+                # Add the filtered neighbors to the list
+                if len(f_neigbors) > 0:
+                    neighbors.append({n: f_neigbors})
+                else:
+                    neighbors.append(n)
+                
+            return neighbors
     
     def get_branch(self,
                    atom1 : int,
@@ -317,9 +371,6 @@ class MolecularGraph:
                 # This path didn't lead to the finishing atom, remove the last
                 return path[:until_now - 1]
     
-    # TODO:
-    # - Add method to find the longest chain in the molecule
-
 # ------------------------------------------------------- #
 #                   The Molecule Class                    #
 # ------------------------------------------------------- #
@@ -696,34 +747,191 @@ class Molecule(object):
         This method will assign the bonded atoms of the molecule
         to each of the atoms
         """
+        # If the bond list hasn't been created
         if self.graph is None:
             self.get_distance_matrix()
-               
-        # Iterate over all possible bonds
-        for ia, pb in self.graph.get_graph().items():
-            # Cases of 1, 2 or 3 bonded atoms (i.e. chirality doesn't matter)
-            if len(pb) < 4:
-                self.atoms[ia].bonded_atoms = list(pb)
-            # Chirality could matter
+
+        # Create the graph
+        self.graph = MolecularGraph(len(self.atoms), self.bonds)
+
+        # Iterate over all atoms
+        for i, a in enumerate(self.atoms):
+            self.atoms[i].bonded_atoms = self.graph.get_neighbors(i)
+    
+    def _graph_to_atoms(self, skeleton : list | dict) -> list | dict:
+        """ Method to convert the graph to atoms
+
+        Parameters
+        ----------
+        skeleton : list or dict
+            Tree graph with with the numbers of each atom
+
+        Returns
+        -------
+        skeleton : list or dict
+            Tree graph with with the atomic symbols
+        """
+        # If the skeleton is a list
+        if isinstance(skeleton, list):
+            atom_graph = []
+            for entry in skeleton:
+
+                # Check if the entry is an integer or a dictionary
+                # and convert accordingly
+                if isinstance(entry, int):
+                    atom_graph.append(self.atoms[entry].element)
+                elif isinstance(entry, dict):
+                    for k, v in entry.items():
+                        key = self.atoms[k].element
+                        atom_graph.append({key : self._graph_to_atoms(v)})
+
+        # If the skeleton is a dictionary
+        else:
+            atom_graph = {}
+
+            # Dictionaries only have lists as values
+            # therefore, no check is required
+            for k, v in skeleton:
+                key = self.atoms[k].element
+                atom_graph[key] = self._graph_to_atoms(v)
+
+        return atom_graph
+    
+    def _is_atom_chiral(self, i : int) -> bool:
+        """ Method to check if an atom is chiral
+
+        Parameters
+        ----------
+        i : int
+            Index of the atom to check
+
+        Returns
+        -------
+        bool
+            True if the atom is chiral, False otherwise
+        """
+        # If the bond list hasn't been created
+        if self.graph is None or len(self.bonds) == 0:
+            self.get_bonds()
+
+        num_neighbors = len(self.atoms[i].bonded_atoms)
+        center_coords = self.atoms[i].get_coordinates()
+
+        if num_neighbors < 3:
+            return False
+        
+        # If there's three neighbors, only a non-planar structure
+        # could lead to 'chirality'
+        elif num_neighbors == 3:
+
+            # Vectors from the center to the neighbors
+            vector_ngbr = []
+            for neighbor in self.atoms[i].bonded_atoms:
+                neighbor_coords = self.atoms[neighbor].get_coordinates()
+                vector_ngbr.append(neighbor_coords - center_coords)
+            
+            # Normals constructed from the center
+            normals = []
+            for j in range(3):
+                nor = np.cross(vector_ngbr[j], vector_ngbr[(j+1)%3])
+                nor = nor / np.linalg.norm(nor)
+                normals.append(nor)
+            
+            # Check if the normals are parallel
+            projs = []
+            for j in range(3):
+                proj = np.dot(normals[j], normals[(j+1)%3])
+                projs.append(np.abs(proj))
+            
+            if (np.array(projs) > 0.9).all():
+                return False
             else:
-                # TODO:
-                # - Get the atomic geometry by number of neighbors
-                # - Decide case based on geometry
-                # - Get the symbols for all neighbors
-                # - Count the number of each symbol
-                # - If symbol = H, F, Cl or Br, and number of symbol = neighbors - 2, add the bonded atoms
-                # Get the masses of the bonded atoms
-                masses = {}
-                for j, ja in enumerate(pb):
-                    masses[j] = self.atoms[ja].mass
-                if set(masses.values()) != list(masses.values()):
-                    pass
-                # Sort the masses
-                sorted_masses = {}
-                for k, v in sorted(masses.items(), key=lambda x: x[1]):
-                    sorted_masses[k] = v
-                
-                
+
+                # If the normals are not parallel, it could be
+                # chiral
+                o_branches = []
+                for d in range(1, self.get_num_atoms()):
+                    g = self.graph.get_neighbors(i, depth=d)
+                    n_branches = self._graph_to_atoms(g)
+                    b12 = n_branches[0] == n_branches[1]
+                    b13 = n_branches[0] == n_branches[2]
+                    b23 = n_branches[1] == n_branches[2]
+                    if b12 or b13 or b23:
+                        return False
+                    if n_branches == o_branches:
+                        return True
+                    else:
+                        o_branches = n_branches.copy()
+
+        # If there's three neighbors, only a non-planar structure
+        # could lead to 'chirality'
+        elif num_neighbors == 4:
+
+            print("Made it to the 4-bonded part")
+
+            # Vectors from the center to the neighbors
+            vector_ngbr = []
+            for neighbor in self.atoms[i].bonded_atoms:
+                neighbor_coords = self.atoms[neighbor].get_coordinates()
+                vector_ngbr.append(neighbor_coords - center_coords)
+            
+            # Normals constructed from the center
+            normals = []
+            for j in range(4):
+                nor = np.cross(vector_ngbr[j], vector_ngbr[(j+1)%4])
+                nor = nor / np.linalg.norm(nor)
+                normals.append(nor)
+            
+            # Check if the normals are parallel
+            projs = []
+            for j in range(4):
+                proj = np.dot(normals[j], normals[(j+1)%4])
+                projs.append(np.abs(proj))
+            
+            if (np.array(projs) > 0.9).all():
+                return False
+            else:
+
+                # If the normals are not parallel, it could be
+                # chiral
+                o_branches = []
+                for d in range(1, self.get_num_atoms()):
+                    g = self.graph.get_neighbors(i, depth=d)
+                    n_branches = self._graph_to_atoms(g)
+                    inter_atom = []
+                    for j in range(4):
+                        for k in range(j+1, 4):
+                            inter_atom.append(n_branches[j] == n_branches[k])
+                    if any(inter_atom):
+                        return False
+                    if n_branches == o_branches:
+                        return True
+                    else:
+                        o_branches = n_branches.copy()
+        else:
+            return False
+
+    def is_chiral(self) -> bool:
+        """ Method to check if an atom is chiral
+
+        This method will check if an atom is chiral, that is,
+        if it has four completely different neighbors.
+
+        Returns
+        -------
+        bool
+            True if the molecule is chiral, False otherwise
+        """
+        # If the bond list hasn't been created
+        if self.graph is None or len(self.bonds) == 0:
+            self.get_bonds()
+
+        for i, a in enumerate(self.atoms):
+            print(f"Is atom {i} chiral?", end=" ")
+            if self._is_atom_chiral(i):
+                return True
+
+        return False
 
     def get_distance_matrix(self) -> np.ndarray:
         """ Method to get the distances between pairs of atoms
@@ -790,6 +998,10 @@ class Molecule(object):
         # If the bond list hasn't been created,
         # or force is applied, do it first
         self.get_distance_matrix()
+
+        # Create the molecular graph, and provide
+        # the atoms with their bonded neighbors
+        self._set_bonded_atoms()
 
         return self.bonds
     
@@ -1457,6 +1669,9 @@ class Molecule(object):
             temp = a.split()
             temp = [float(c) if i != 0 else c for i, c in enumerate(temp)]
             self.add_atoms(Atom(*temp))
+        
+        # Compute the bonds of the molecule
+        self.get_bonds()
 
     def save_as_xyz(self) -> None:
         """ Save molecule as an XYZ file

@@ -523,3 +523,19 @@ def test_molecule_compute_charge_box_grid(methane_molecule):
     total_charge = (charge_grid * (0.1)**3).sum()
 
     assert np.round(total_charge, 1) == 2.5
+
+def test_molecule_chiral(methane_molecule):
+
+    mol1, atoms1 = methane_molecule
+
+    here = os.path.dirname(os.path.abspath(__file__))
+
+    mol2 = informalff.Molecule("methanol")
+    mol2.read_xyz(os.path.join(here, "mols", "methanol.xyz"))
+
+    mol3 = informalff.Molecule("chloro-fluoro-methanol")
+    mol3.read_xyz(os.path.join(here, "mols", "ClFMeOH.xyz"))
+
+    assert not mol1.is_chiral()
+    assert not mol2.is_chiral()
+    assert mol3.is_chiral()
