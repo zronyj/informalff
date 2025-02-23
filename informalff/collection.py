@@ -106,16 +106,16 @@ class Collection(object):
                         temp = m
                         break
                 content += ("Atoms per molecule: "
-                            f"{self.molecules[temp].get_atoms()}\n")
+                            f"{self.molecules[temp].get_num_atoms()}\n")
             content += "\n         Limits\n------------------------------\n"
-            lims = self.get_limits()
+            lims = self.get_limits(option="scan")
             content += "     Lower    Upper  Side\n"
-            content += (f"X:{lims['x'][0]:8.3f} {lims['x'][1]:8.3f}"
-                        f" {lims['x'][2]:5.2f}\n")
-            content += (f"Y:{lims['y'][0]:8.3f} {lims['y'][1]:8.3f}"
-                        f" {lims['y'][2]:5.2f}\n")
-            content += (f"Z:{lims['z'][0]:8.3f} {lims['z'][1]:8.3f}"
-                        f" {lims['z'][2]:5.2f}\n")
+            content += (f"X:{lims['X'][0]:8.3f} {lims['X'][1]:8.3f}"
+                        f" {lims['X'][2]:5.2f}\n")
+            content += (f"Y:{lims['Y'][0]:8.3f} {lims['Y'][1]:8.3f}"
+                        f" {lims['Y'][2]:5.2f}\n")
+            content += (f"Z:{lims['Z'][0]:8.3f} {lims['Z'][1]:8.3f}"
+                        f" {lims['Z'][2]:5.2f}\n")
         content += "\n            Density           \n"
         content += "------------------------------\n"
         content += f"    {self.get_density():>8.4f} g/cm^3      \n"
@@ -197,6 +197,34 @@ class Collection(object):
                            "in the collection; no molecule deleted."))
             return False
     
+    def get_num_atoms(self) -> int:
+        """ Method to get the number of atoms in the collection
+
+        Returns
+        -------
+        int
+            The number of atoms in the collection.
+        """
+        return self.__natoms
+    
+    def get_coords(self) -> list:
+        """ Method to get the collection's coordinates
+
+        Returns
+        -------
+        todos : list of list
+            A list with the atoms represented by lists with
+            the symbol and X, Y, Z coordinates.
+        """
+        todos = []
+
+        for mol in self.molecules.keys():
+            for a in self.molecules[mol].atoms:
+                x, y, z = a.get_coordinates()
+                todos.append([a.element, x, y, z, a.charge])
+
+        return todos
+
     def get_density(self) -> float:
         """ Calculate the collection's density
 
@@ -760,7 +788,7 @@ class Collection(object):
         mins = np.array([lims['X'][0], lims['Y'][0], lims['Z'][0]])
 
         # Iterate over molecules
-        for mol in self.molecules.items():
+        for im, mol in self.molecules.items():
             # Iterate over atoms
             for a in mol.atoms:
                 # Get the atom's current coordinates
@@ -1032,7 +1060,7 @@ class Collection(object):
             xyz.write(content)
 
 
-    def save_as_xyz(self, f_nam : str ="collection") -> None:
+    def save_as_xyz(self, f_nam : str = "") -> None:
         """ Save collection as an XYZ file
 
         This method does not return anything, nor it requires
@@ -1043,6 +1071,9 @@ class Collection(object):
         f_nam : str
             The name of the file *without the extension*!
         """
+        # Check that the name is not empty
+        if f_nam == "":
+            f_nam = self.name
 
         # Create a template for the XYZ coordinates
         template = " {s} {x:16.8f} {y:16.8f} {z:16.8f}\n"

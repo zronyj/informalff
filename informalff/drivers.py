@@ -6,6 +6,7 @@ import warnings          # To throw warnings instead of raising errors
 from subprocess import run # Method to run external commands
 from multiprocessing import Pool # To parallelize jobs
 from abc import ABC, abstractmethod # To be able to create several drivers
+from .structure import Structure
 from .molecule import Molecule
 from .collection import Collection
 
@@ -120,7 +121,7 @@ class ORCA_driver(QM_driver):
     def __init__(self,
                  path : str,
                  qm_props : dict,
-                 mol : Molecule):
+                 sub_structure : Molecule | Collection):
         """ ORCA_driver constructor method
         
         Parameters
@@ -129,12 +130,12 @@ class ORCA_driver(QM_driver):
             The path of the Orca executable, including the executable itself
         qm_props : dict
             The calculation's properties (e.g. level of theory, basis set)
-        mol : Molecule
-            A Molecule object to create the inputs for Orca
+        sub_structure : Molecule | Collection
+            A Molecule or Collection object to create the inputs for Orca
         """
         self.orca_path = path
         self.props = qm_props
-        self.molecule = mol        
+        self.sub_structure = sub_structure
     
     def create_input(self) -> str:
         """ Method to create the input files for the Orca calculation
@@ -154,8 +155,8 @@ class ORCA_driver(QM_driver):
         geom = (f'*xyzfile {self.props["charge"]} '
                 f'{self.props["multipl"]} geometry.xyz\n')
         
-        # Renaming the molecule as "geometry"
-        self.molecule.name = "geometry"
+        # Renaming the molecule or collection as "geometry"
+        self.sub_structure.name = "geometry"
 
         # Get the current working directory, and creating the directory
         # for the Orca calculation
@@ -171,7 +172,7 @@ class ORCA_driver(QM_driver):
             f.write(header + geom)
 
         # Saving the geometry as an XYZ file
-        self.molecule.save_as_xyz()
+        self.sub_structure.save_as_xyz()
 
         # Return to the base directory
         os.chdir(here)
@@ -232,10 +233,14 @@ class ORCA_driver(QM_driver):
         # Empty dictionary to store the results
         results = {}
 
-        # Creating empty Molecule object
-        results['Geometry'] = Molecule(self.molecule.name)
+        # Get the geometry and interpret it as a Molecule
+        # or as a Collection
+        struc = Structure(self.sub_structure.name)
         # Loading the information from the XYZ file
-        results['Geometry'].read_xyz(os.path.join(wd, 'geometry.xyz'))
+        struc.read_xyz(os.path.join(wd, 'geometry.xyz'))
+        # Saving the structure
+        results['Geometry'] = struc.get_sub_structure()
+
         # Creating an empty dictionary for the charges
         results['Charges'] = {}
 
@@ -259,7 +264,7 @@ class ORCA_driver(QM_driver):
             # Parse the orbital energies
             if 'ORBITAL ENERGIES' in l:
                 orb_energs = []
-                for j in range(self.molecule.get_num_atoms() * 5):
+                for j in range(self.sub_structure.get_num_atoms() * 5):
                     try:
                         temp = data[i + 4 + j].split()
                         temp = [
@@ -274,7 +279,7 @@ class ORCA_driver(QM_driver):
             # Parse the Mulliken charges
             if 'MULLIKEN ATOMIC CHARGES' in l:
                 results['Charges']['Mulliken'] = []
-                for j in range(self.molecule.get_num_atoms()):
+                for j in range(self.sub_structure.get_num_atoms()):
                     temp = data[i + 2 + j].split()
                     results['Charges']['Mulliken'].append([
                                                         temp[1],
@@ -284,7 +289,7 @@ class ORCA_driver(QM_driver):
             # Parse the Loewding charges
             if 'LOEWDIN ATOMIC CHARGES' in l:
                 results['Charges']['Loewdin'] = []
-                for j in range(self.molecule.get_num_atoms()):
+                for j in range(self.sub_structure.get_num_atoms()):
                     temp = data[i + 2 + j].split()
                     results['Charges']['Loewdin'].append([
                                                         temp[1],
@@ -314,22 +319,22 @@ class PSI4_driver(QM_driver):
             - charge: total charge of the system
             - multipl: multiplicity of the system
             - modifiers: type of calculation, hardware specs, etc.
-    mol : Molecule
-        A molecule which will save an XYZ file to be used by Psi4 for the
-        calculation
+    mol : Molecule | Collection
+        A molecule or collection which will save an XYZ file to be used 
+        by Psi4 for the calculation
     """
 
     def __init__(self,
                  qm_props : dict,
-                 mol : Molecule):
+                 sub_structure : Molecule | Collection):
         """ PSI4_driver constructor method
         
         Parameters
         ----------
         qm_props : dict
             The calculation's properties (e.g. level of theory, basis set)
-        mol : Molecule
-            A Molecule object to create the inputs for Psi4
+        sub_structure : Molecule | Collection
+            A Molecule or Collection object to create the inputs for Psi4
         """
         try:
             import psi4
@@ -337,7 +342,7 @@ class PSI4_driver(QM_driver):
             raise ImportError("Psi4_driver requires psi4 to be installed!")
         
         self.props = qm_props
-        self.molecule = mol
+        self.sub_structure = sub_structure
 
         self.psi4_geom = ''
         self.final_energy = 0.0
@@ -347,7 +352,7 @@ class PSI4_driver(QM_driver):
         
         """
         # Renaming the molecule as "geometry"
-        self.molecule.name = "geometry"
+        self.sub_structure.name = "geometry"
         
         # Get the current working directory, and creating the directory
         # for the Psi4 calculation
@@ -364,14 +369,16 @@ class PSI4_driver(QM_driver):
             json.dump(self.props, f, indent=4)
         
         # Writing the XYZ file
-        self.molecule.save_as_xyz()
+        self.sub_structure.save_as_xyz()
 
         # Writing the Psi4 geometry
         self.psi4_geom += f"""
 {self.props['charge']} {self.props['multipl']}\n"""
         
-        for a in self.molecule.atoms:
-            self.psi4_geom += f'{a.element} {a.coords[0]} {a.coords[1]} {a.coords[2]}\n'
+        # Get all the atoms as a list
+        all_atoms = self.sub_structure.get_coords()
+        for a in all_atoms:
+            self.psi4_geom += f'{a[0]} {a[1]} {a[2]} {a[3]}\n'
         
         self.psi4_geom += 'units angstrom\n'
 
@@ -434,6 +441,11 @@ class PSI4_driver(QM_driver):
         wd : str
             The path of the directory where the Psi4 calculation
             should be performed
+        
+        Returns
+        -------
+        results : dict
+            The parsed Psi4 results
         """
         # Create the path to the output file
         out = os.path.join(wd, 'output.out')
@@ -441,10 +453,14 @@ class PSI4_driver(QM_driver):
         # Empty dictionary to store the results
         results = {}
 
-        # Creating empty Molecule object
-        results['Geometry'] = Molecule(self.molecule.name)
+        # Get the geometry and interpret it as a Molecule
+        # or as a Collection
+        struc = Structure(self.sub_structure.name)
         # Loading the information from the XYZ file
-        results['Geometry'].read_xyz(os.path.join(wd, 'geometry.xyz'))
+        struc.read_xyz(os.path.join(wd, 'geometry.xyz'))
+        # Saving the structure
+        results['Geometry'] = struc.get_sub_structure()
+        
         # Creating an empty dictionary for the charges
         results['Charges'] = {}
         # Adding the final energy
@@ -491,7 +507,7 @@ class PSI4_driver(QM_driver):
             # Parse the Mulliken charges
             if 'Mulliken Charges: (a.u.)' in l:
                 results['Charges']['Mulliken'] = []
-                for j in range(self.molecule.get_num_atoms()):
+                for j in range(self.sub_structure.get_num_atoms()):
                     temp = data[i + 2 + j].split()
                     results['Charges']['Mulliken'].append([
                                                         temp[1],
@@ -501,7 +517,7 @@ class PSI4_driver(QM_driver):
             # Parse the Loewding charges
             if 'Lowdin Charges: (a.u.)' in l:
                 results['Charges']['Loewdin'] = []
-                for j in range(self.molecule.get_num_atoms()):
+                for j in range(self.sub_structure.get_num_atoms()):
                     temp = data[i + 2 + j].split()
                     results['Charges']['Loewdin'].append([
                                                         temp[1],
