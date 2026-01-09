@@ -20,9 +20,13 @@ class MolecularGraph:
     graph : dict
         A dictionary with the connectivity of the molecule
     """
-    def __init__(self, atoms : int, bonds : list):
-        """
-        MolecularGraph constructor method
+    def __init__(
+            self,
+            atoms : int,
+            bonds : list,
+            force : bool = False
+            ):
+        """ MolecularGraph constructor method
         
         Parameters
         ----------
@@ -30,6 +34,9 @@ class MolecularGraph:
             The number of atoms in the molecule
         bonds : list of list
             A list of pairs of atoms defining the bonds of the molecule
+        force : bool (optional)
+            If not all atoms are in the bonds, and 'force' is active, the
+            non-bonded atoms will be ignored.
         """
 
         if atoms < 0:
@@ -42,10 +49,15 @@ class MolecularGraph:
         
         pre_bonds = set(pre_bonds)
         if len(pre_bonds) != atoms:
-            raise ValueError("MolecularGraph.__init__() The number of atoms"
-                             " and the atoms in the bonds do not match!")
-
-        self.atoms = list(range(atoms))
+            if force:
+                self.atoms = sorted(list(pre_bonds))
+            else:
+                raise ValueError("MolecularGraph.__init__() The number of "
+                                "atoms and the atoms in the bonds do not "
+                                "match!")
+        else:
+            self.atoms = list(range(atoms))
+        
         self.bonds = bonds
 
         # Initialize the dictionary for the graph
@@ -170,7 +182,7 @@ class MolecularGraph:
             for nl in next_level:
                 # If the neighbor is already in the path, return the path
                 if nl in path:
-                    return path
+                    continue
                 # If the neighbor is not in the path, continue the search
                 else:
                     path.append(nl)
@@ -198,8 +210,8 @@ class MolecularGraph:
         -------
         path : list
             The path that has been walked already
-        rings : dict
-            The rings of the molecule as a dictionary"""
+        rings : list
+            The rings of the molecule as a list"""
         
         # Check if the path is empty
         if len(path) == 0:

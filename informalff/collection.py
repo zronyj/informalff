@@ -1,11 +1,11 @@
-import copy              # To copy objects
-import numpy as np       # To do basic scientific computing
-from multiprocessing import Pool # To parallelize jobs
-import warnings          # To throw warnings instead of raising errors
-from functools import lru_cache # To cache functions
-from scipy.special import gamma # To compute the gamma function
+import copy                          # To copy objects
+import warnings                      # To throw warnings instead of raising errors
+import numpy as np                   # To do basic scientific computing
+import scipy.constants as cts        # Universal constants
+from multiprocessing import Pool     # To parallelize jobs
+from functools import lru_cache      # To cache functions
+from scipy.special import gamma      # To compute the gamma function
 from scipy.optimize import curve_fit # To fit the Subbotin function
-
 
 from .atom import PERIODIC_TABLE
 from .molecule import Molecule, BOHR
@@ -75,6 +75,7 @@ class Collection(object):
         self.molecules = {}
         self.__nmols = 0
         self.__natoms = 0
+        self.__ref_atoms = []
     
     def __repr__(self):
         """ Method to represent a Collection
@@ -122,6 +123,158 @@ class Collection(object):
         content += "==============================\n"
         return content
     
+    def __remap(self) -> None:
+        """ Method to keep a reference of all atoms in the collection
+        """
+
+        # If no molecules are present, just clear the list
+        if len(self.molecules) == 0:
+            self.__ref_atoms = []
+        else:
+            # Else, save a key, index pair to locate the atoms
+            self.__ref_atoms = []
+            for mk, mv in self.molecules.items():
+                for ia, a in enumerate(mv.atoms):
+                    self.__ref_atoms.append((mk, ia))
+
+    def __getitem__(self, idx : int | slice):
+        """ Retrieve an atom's information based on index.
+
+        Parameters
+        ----------
+        idx : int, slice, or str
+            - If an integer, it retrieves the atom at that index.
+            - If a slice, it retrieves a list of atoms defined by the slice.
+        
+        Returns
+        -------
+        list or list of lists
+            - If an integer is provided, it returns a list containing
+              the atom's symbol, and Cartesian coordinates.
+            - If a slice is provided, it returns a list of lists, each
+              containing the symbol, and Cartesian coordinates of
+              the atoms defined by the slice.
+        
+        Raises
+        ------
+        TypeError
+            If the provided argument is not an integer or slice.
+        """
+        if isinstance(idx, int):
+            ref_code = self.__ref_atoms[idx]
+            tmp_atom = self.molecules[ref_code[0]].atoms[ref_code[1]]
+            return [
+                tmp_atom.element,
+                tmp_atom.get_coordinates()
+            ]
+        elif isinstance(idx, slice):
+            piece = []
+            i = idx.start if idx.start != None else 0
+            o = idx.stop if idx.stop != None else len(self.__ref_atoms)
+            e = idx.step if idx.step != None else 1
+            for j in range(i, o, e):
+                ref_code = self.__ref_atoms[j]
+                tmp_atom = self.molecules[ref_code[0]].atoms[ref_code[1]]
+                piece.append(
+                    [
+                        tmp_atom.element,
+                        tmp_atom.get_coordinates()
+                    ]
+                )
+            return piece
+        else:
+            raise TypeError(
+                    f"Collection.__getitem__() The argument {idx} is not an "
+                    "integer or a slice object."
+            )
+    
+    def __setitem__(self, idx : int | slice , data : list):
+        """ Set an atom's information based on index or slice.
+
+        Parameters
+        ----------
+        idx : int, slice, or str
+            - If an integer, it sets the atom at that index.
+            - If a slice, it sets a list of atoms defined by the slice.
+        data : list
+            - If an integer is provided, data should be a list containing
+              the atom's symbol, and Cartesian coordinates.
+            - If a slice is provided, data should be a list of lists, each
+              containing the symbol, and Cartesian coordinates of
+              the atoms to be set defined by the slice.
+        
+        Raises
+        ------
+        TypeError
+            If the provided arguments are not of the expected types.
+        """
+        if not isinstance(data, list):
+            raise TypeError(
+                    f"Collection.__setitem__() Expected a list, got {type(data)}"
+            )
+        if len(data) == 0:
+            raise ValueError(
+                "Collection.__setitem__() The provided list is empty"
+            )
+        if isinstance(idx, int):
+            if len(data) != 2:
+                raise ValueError(
+                        "Collection.__setitem__() Expected list with the "
+                        f"symbol and the 3D coordinates, got {data}"
+                )
+            if not isinstance(data[0], str) or \
+                not isinstance(data[1], np.ndarray):
+                raise TypeError(
+                        f"Collection.__setitem__() The item "
+                        f"{data} is not shaped as a list of: str "
+                        "and np.ndarray."
+                )
+            if len(data[1]) != 3:
+                raise ValueError(
+                        "Collection.__setitem__() Expected a 3D vector, "
+                        f"got an array with shape {data[2].shape}"
+                )
+            ref_code = self.__ref_atoms[idx]
+            self.molecules[ref_code[0]].atoms[ref_code[1]].element = data[0]
+            self.molecules[ref_code[0]].atoms[ref_code[1]].coords = data[1]
+        elif isinstance(idx, slice):
+            i = idx.start if idx.start != None else 0
+            o = idx.stop if idx.stop != None else len(self.__ref_atoms)
+            e = idx.step if idx.step != None else 1
+
+            for jdx, op in enumerate(range(i, o, e)):
+                if not isinstance(data[jdx], list):
+                    raise TypeError(
+                            "Collection.__setitem__() Expected a list, got "
+                            f"{type(data[jdx])}"
+                    )
+                if len(data[jdx]) != 2:
+                    raise ValueError(
+                            "Collection.__setitem__() Expected list with the "
+                            f"symbol and the 3D coordinates, got {data}"
+                    )
+                if not isinstance(data[jdx][0], str) or \
+                    not isinstance(data[jdx][2], np.ndarray):
+                    raise TypeError(
+                            f"Collection.__setitem__() The item {jdx}: "
+                            f"{data[jdx]} is not shaped as a list of: str "
+                            "and np.ndarray."
+                    )
+                if len(data[jdx][1]) != 3:
+                    raise ValueError(
+                            "Collection.__setitem__() Expected a 3D vector, "
+                            f"got an array with shape {data[jdx][1].shape}"
+                    )
+            for jdx, op in enumerate(range(i, o, e)):
+                ref_code = self.__ref_atoms[op]
+                self.molecules[ref_code[0]].atoms[ref_code[1]].element = data[jdx][0]
+                self.molecules[ref_code[0]].atoms[ref_code[1]].coords = data[jdx][1]
+        else:
+            raise TypeError(
+                    f"Collection.__setitem__() The argument {idx} is not an "
+                    "integer or a slice object."
+            )
+
     def add_molecule(self, idm : str, mol : Molecule) -> bool:
         """ Method to add a molecule to the collection
 
@@ -165,6 +318,9 @@ class Collection(object):
         self.__nmols += 1
         self.__natoms += mol.get_num_atoms()
 
+        # Update the atoms reference map
+        self.__remap()
+
         return True
 
     def remove_molecule(self, idm : str) -> bool:
@@ -191,6 +347,8 @@ class Collection(object):
             self.__nmols -= 1
             # Remove the molecule from the collection
             del self.molecules[idm]
+            # Update the atoms reference map
+            self.__remap()
             return True
         else:
             warnings.warn((f"Collection.remove_molecule() No molecule {idm} "
@@ -316,6 +474,34 @@ class Collection(object):
         collection_center /= self.__natoms
 
         return collection_center
+    
+    @lru_cache(maxsize=1)
+    def get_center_of_mass(self) -> np.ndarray:
+        """ Method to get the center of mass of the collection
+
+        Returns
+        -------
+        collection_com : ndarray
+            A NumPy array with the X, Y, Z coordinates of the
+            geometric center of the molecule.
+        """
+        # Start assuming that the center is at 0, 0, 0
+        collection_com = np.array([0,0,0], dtype=np.float64)
+
+        # Iterate over all molecules and atoms
+        for mol in self.molecules.values():
+            for atom in mol.atoms:
+
+                # Take the coordinates of each atom and add them to the center
+                collection_com += atom.coords * PERIODIC_TABLE.loc[
+                                                        atom.element,
+                                                        "AtomicMass"
+                                                ]
+
+        # Scaling it down by the number of atoms
+        collection_com /= self.get_total_mass()
+
+        return collection_com
 
     @lru_cache(maxsize=3)
     def get_limits(self,
@@ -769,6 +955,67 @@ class Collection(object):
         v_field = np.array(x_vfield)
 
         return grid, v_field
+    
+    def compute_inertia_tensor(self, bohr : bool = False) -> tuple:
+        """ Method to compute the inertia tensor of the collection
+
+        This method computes the inertia tensor of the collection,
+        its eigenvalues and eigenvectors, and also returns the
+        shifted atomic coordinates (to the center of mass).
+
+        Parameters
+        ----------
+        bohr : bool
+            Should the calculation be done in Bohr, instead of
+            Angstrom?
+
+        Returns
+        -------
+        inertia_tensor : ndarray
+            The inertia tensor of the collection.
+        eig_val : ndarray
+            The eigenvalues of the inertia tensor.
+        eig_vec : ndarray
+            The eigenvectors of the inertia tensor.
+        shifted_atoms : list
+            A list with the shifted atomic coordinates.
+        """
+        # Get the coordinates of all the atoms
+        atoms = self.get_coords()
+        atoms = [(a[0], np.array([*a[1:4]])) for a in atoms]
+
+        # Center of mass
+        com = self.get_center_of_mass()
+
+        # Shift all atoms to the center of mass
+        if bohr:
+            b = cts.physical_constants['Bohr radius'][0] * 1E10
+            shifted_atoms = [[a[0], (a[1] - com) / b] for a in atoms]
+        else:
+            shifted_atoms = [[a[0], a[1] - com] for a in atoms]
+
+        # Build the inertia tensor
+        Ixx = Iyy = Izz = Ixy = Ixz = Iyz = 0.0
+
+        for a in shifted_atoms:
+            Ixx += PERIODIC_TABLE.loc[a[0], "AtomicMass"] * (a[1][1]**2 + a[1][2]**2)
+            Iyy += PERIODIC_TABLE.loc[a[0], "AtomicMass"] * (a[1][0]**2 + a[1][2]**2)
+            Izz += PERIODIC_TABLE.loc[a[0], "AtomicMass"] * (a[1][0]**2 + a[1][1]**2)
+
+            Ixy += PERIODIC_TABLE.loc[a[0], "AtomicMass"] * (a[1][0] * a[1][1])
+            Ixz += PERIODIC_TABLE.loc[a[0], "AtomicMass"] * (a[1][0] * a[1][2])
+            Iyz += PERIODIC_TABLE.loc[a[0], "AtomicMass"] * (a[1][1] * a[1][2])
+        
+        inertia_tensor = np.array([
+            [ Ixx, -Ixy, -Ixz],
+            [-Ixy,  Iyy, -Iyz],
+            [-Ixz, -Iyz,  Izz]
+        ])
+
+        # Diagonalize the inertia tensor
+        eig_val, eig_vec = np.linalg.eigh(inertia_tensor)
+
+        return inertia_tensor, eig_val, eig_vec, shifted_atoms
 
     def corner_box(self) -> None:
         """ Re-position the collection putting an edge on the origin

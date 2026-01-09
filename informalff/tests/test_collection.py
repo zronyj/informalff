@@ -3,6 +3,7 @@ Unit and regression tests for the collection module of the informalff package.
 """
 
 # Import this package, (test suite), and other packages as needed
+from copy import deepcopy
 import numpy as np
 import pytest
 import os
@@ -89,6 +90,29 @@ def test_collection_get_center():
     temp = coll.get_center() - np.array([0.5, 1.0, 0.0])
 
     assert np.linalg.norm(temp) == 0
+
+def test_collection_get_set_atoms(methane_molecule):
+
+    mol1, atoms1 = methane_molecule
+    mol2 = deepcopy(mol1)
+    atoms2 = deepcopy(atoms1)
+
+    move = np.array([0.0, 0.0, 2.0])
+
+    mol2.move_molecule(move)
+
+    coll = informalff.Collection("clash")
+    coll.add_molecule("CH4_1", mol1)
+    coll.add_molecule("CH4_2", mol2)
+
+    coords2 = [[a.element, a.get_coordinates() + move] for a in atoms2]
+
+    for i, atm in enumerate(coll[5:]):
+        assert np.allclose(atm[1], coords2[i][1])
+    
+    for i, atm in enumerate(coll[:5]):
+        coll[i] = deepcopy(coords2[i])
+        assert np.allclose(coll[i][1], coll[i+5][1])
 
 def test_collection_detect_collisions(methane_molecule):
 

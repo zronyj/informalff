@@ -6,6 +6,7 @@ Unit and regression tests for the molecule module of the informalff package.
 import os
 import pytest
 import numpy as np
+from copy import deepcopy
 
 import informalff
 
@@ -58,6 +59,19 @@ def test_molecule_create():
     mol2.add_atoms(h3, h4)
 
     assert mol1.mol_weight - mol2.mol_weight == 0.0
+
+def test_molecule_get_set_coords(methane_molecule):
+    
+    mol1, atoms1 = methane_molecule
+    mol2 = deepcopy(mol1)
+
+    move = np.array([0.0, 0.0, 2.0])
+
+    mol2.move_molecule(move)
+
+    for i in range(mol1.get_num_atoms()):
+        assert mol1[i][0] == mol2[i][0]
+        assert np.allclose(mol2[i][1], mol1[i][1] + move)
 
 def test_molecule_get_distance_matrix():
 
@@ -215,11 +229,11 @@ def test_molecule_rotate_molecule_over_center(methane_molecule):
 
     assert x and y and z
 
-def test_molecule_rotate_molecule_over_atom(methane_molecule):
+def test_molecule_rotate_molecule_over_atom_axis(methane_molecule):
 
     mol1, atoms1 = methane_molecule
 
-    mol1.rotate_molecule_over_atom(np.array([0,90,0]), 1)
+    mol1.rotate_molecule_over_atom_axis(np.array([0,1,0]), 90, 1)
 
     first_atom = np.array(mol1.get_coords()[0][1:])
 
@@ -229,7 +243,21 @@ def test_molecule_rotate_molecule_over_atom(methane_molecule):
 
     assert x and y and z
 
-def test_molecule_rotate_selected_atoms_over_atom(methane_molecule):
+def test_molecule_rotate_molecule_over_atom_euler(methane_molecule):
+
+    mol1, atoms1 = methane_molecule
+
+    mol1.rotate_molecule_over_atom_euler(np.array([0,90,0]), 1)
+
+    first_atom = np.array(mol1.get_coords()[0][1:])
+
+    x = pytest.approx(first_atom[0], 1e-3) == -1.089
+    y = pytest.approx(first_atom[1], 0.1) == 0.0
+    z = pytest.approx(first_atom[2], 1e-3) == 1.089
+
+    assert x and y and z
+
+def test_molecule_rotate_selected_atoms_over_atom_axis(methane_molecule):
 
     mol1, atoms1 = methane_molecule
 
@@ -238,7 +266,7 @@ def test_molecule_rotate_selected_atoms_over_atom(methane_molecule):
 
     c1 = mol1.get_coords()
 
-    mol1.rotate_selected_atoms_over_atom(np.array([0,0,120]), 0)
+    mol1.rotate_selected_atoms_over_atom_axis(np.array([0,0,1]), 120, 0)
 
     c2 = mol1.get_coords()
 
@@ -248,7 +276,26 @@ def test_molecule_rotate_selected_atoms_over_atom(methane_molecule):
 
     assert x1 and x2 and x3
 
-def test_molecule_rotate_selected_atoms_over_atom2(methane_molecule):
+def test_molecule_rotate_selected_atoms_over_atom_euler(methane_molecule):
+
+    mol1, atoms1 = methane_molecule
+
+    for q in range(2,5):
+        mol1.atoms[q].flag = True
+
+    c1 = mol1.get_coords()
+
+    mol1.rotate_selected_atoms_over_atom_euler(np.array([0,0,120]), 0)
+
+    c2 = mol1.get_coords()
+
+    x1 = pytest.approx(c1[2][1], 1e-3) == pytest.approx(c2[3][1], 1e-3)
+    x2 = pytest.approx(c1[3][1], 1e-3) == pytest.approx(c2[4][1], 1e-3)
+    x3 = pytest.approx(c1[4][1], 1e-3) == pytest.approx(c2[2][1], 1e-3)
+
+    assert x1 and x2 and x3
+
+def test_molecule_rotate_selected_atoms_over_atom_euler2(methane_molecule):
 
     mol1, atoms1 = methane_molecule
 
@@ -256,7 +303,7 @@ def test_molecule_rotate_selected_atoms_over_atom2(methane_molecule):
         mol1.atoms[q].flag = True
     
     with pytest.raises(ValueError) as e_info:
-        mol1.rotate_selected_atoms_over_atom(np.array([0,90,0]), 1)
+        mol1.rotate_selected_atoms_over_atom_euler(np.array([0,90,0]), 1)
 
 def test_molecule_rotate_molecule_over_bond(methane_molecule):
 

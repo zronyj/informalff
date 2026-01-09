@@ -109,6 +109,14 @@ class Atom(object):
         NumPy array with the X, Y and Z coordinates as `float`
     flag : bool
         A flag to denote if the atom has been selected or not
+    charge : float
+        The atom's charge
+    radius : float
+        The atom's radius
+    mass : float
+        The atom's mass
+    bonded_atoms : list
+        A list with the ID of the bonded atoms
     """
 
     def __init__(self,
@@ -140,7 +148,7 @@ class Atom(object):
         if element in all_symbols:
             self.element = element
         else:
-            raise TypeError((f"Atom.__init__() The symbol {element} does not "
+            raise ValueError((f"Atom.__init__() The symbol {element} does not "
                 "correspond to any element in the Periodic Table."))
         
         radius = PERIODIC_TABLE.loc[self.element, "AtomicRadius"]
@@ -220,22 +228,15 @@ class Atom(object):
         """
         return self.coords
 
-    def move_atom(self,
-                  vx : float,
-                  vy : float,
-                  vz : float):
+    def move_atom(self, v_move : np.ndarray) -> None:
         """ Method to move the Atom's coordinates
         
         Parameters
         ----------
-        vx : float
-            The motion vector's X coordinate
-        vy : float
-            The motion vector's Y coordinate
-        vz : float
-            The motion vector's Z coordinate
+        v_move : ndarray
+            NumPy array with the X, Y and Z coordinates as `float`
         """
-        self.coords += np.array([vx, vy, vz])
+        self.coords += v_move
     
     def sphere_grid(self,
                     r : float = 1,

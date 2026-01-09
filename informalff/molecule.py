@@ -38,6 +38,8 @@ class Molecule(object):
         A `list` with all the trios of atoms creating angles
     dihedrals : list of list
         A `list` with all the quartets of atoms creating dihedrals
+    torsions : list of list
+        A `list` with all the rotable bonds in the molecule
     mol_weight : float
         The molecular weight
     charge : float
@@ -57,8 +59,10 @@ class Molecule(object):
         self.name = name
         self.atoms = []
         self.bonds = []
+        self.bond_type = []
         self.angles = []
         self.dihedrals = []
+        self.torsions = []
         self.mol_weight = 0.0
         self.charge = 0.0
         self.volume = 0.0
@@ -171,6 +175,138 @@ class Molecule(object):
         # Remove the atoms from the back to the front
         for w in atoms[::-1]:
             self.atoms.pop(w)
+    
+    def __getitem__(self, idx : int | slice):
+        """ Retrieve an atom's information based on index.
+
+        Parameters
+        ----------
+        idx : int, slice, or str
+            - If an integer, it retrieves the atom at that index.
+            - If a slice, it retrieves a list of atoms defined by the slice.
+        
+        Returns
+        -------
+        list or list of lists
+            - If an integer is provided, it returns a list containing
+              the atom's symbol, and Cartesian coordinates.
+            - If a slice is provided, it returns a list of lists, each
+              containing the symbol, and Cartesian coordinates of
+              the atoms defined by the slice.
+        
+        Raises
+        ------
+        TypeError
+            If the provided argument is not an integer or slice.
+        """
+        if isinstance(idx, int):
+            return [
+                self.atoms[idx].element,
+                self.atoms[idx].get_coordinates()
+            ]
+        elif isinstance(idx, slice):
+            piece = []
+            i = idx.start if idx.start != None else 0
+            o = idx.stop if idx.stop != None else len(self.atoms)
+            e = idx.step if idx.step != None else 1
+            for j in range(i, o, e):
+                piece.append(
+                    [
+                        self.atoms[j].element,
+                        self.atoms[j].get_coordinates()
+                    ]
+                )
+            return piece
+        else:
+            raise TypeError(
+                    f"Molecule.__getitem__() The argument {idx} is not an "
+                    "integer or a slice object."
+            )
+    
+    def __setitem__(self, idx : int | slice , data : list):
+        """ Set an atom's information based on index or slice.
+
+        Parameters
+        ----------
+        idx : int, slice, or str
+            - If an integer, it sets the atom at that index.
+            - If a slice, it sets a list of atoms defined by the slice.
+        data : list
+            - If an integer is provided, data should be a list containing
+              the atom's symbol, and Cartesian coordinates.
+            - If a slice is provided, data should be a list of lists, each
+              containing the symbol, and Cartesian coordinates of
+              the atoms to be set defined by the slice.
+        
+        Raises
+        ------
+        TypeError
+            If the provided arguments are not of the expected types.
+        """
+        if not isinstance(data, list):
+            raise TypeError(
+                    f"Molecule.__setitem__() Expected a list, got {type(data)}"
+            )
+        if len(data) == 0:
+            raise ValueError(
+                "Molecule.__setitem__() The provided list is empty"
+            )
+        if isinstance(idx, int):
+            if len(data) != 2:
+                raise ValueError(
+                        "Molecule.__setitem__() Expected list with the "
+                        f"symbol and the 3D coordinates, got {data}"
+                )
+            if not isinstance(data[0], str) or \
+                not isinstance(data[1], np.ndarray):
+                raise TypeError(
+                        f"Molecule.__setitem__() The item "
+                        f"{data} is not shaped as a list of: str "
+                        "and np.ndarray."
+                )
+            if len(data[1]) != 3:
+                raise ValueError(
+                        "Molecule.__setitem__() Expected a 3D vector, "
+                        f"got an array with shape {data[2].shape}"
+                )
+            self.atoms[idx].element = data[0]
+            self.atoms[idx].coords = data[1]
+        elif isinstance(idx, slice):
+            i = idx.start if idx.start != None else 0
+            o = idx.stop if idx.stop != None else len(self.atoms)
+            e = idx.step if idx.step != None else 1
+
+            for jdx, kdx in enumerate(range(i, o, e)):
+                if not isinstance(data[jdx], list):
+                    raise TypeError(
+                            "Molecule.__setitem__() Expected a list, got "
+                            f"{type(data[jdx])}"
+                    )
+                if len(data[jdx]) != 2:
+                    raise ValueError(
+                            "Molecule.__setitem__() Expected list with the "
+                            f"symbol and the 3D coordinates, got {data}"
+                    )
+                if not isinstance(data[jdx][0], str) or \
+                    not isinstance(data[jdx][2], np.ndarray):
+                    raise TypeError(
+                            f"Molecule.__setitem__() The item {jdx}: "
+                            f"{data[jdx]} is not shaped as a list of str "
+                            "and np.ndarray."
+                    )
+                if len(data[jdx][1]) != 3:
+                    raise ValueError(
+                            "Molecule.__setitem__() Expected a 3D vector, "
+                            f"got an array with shape {data[jdx][1].shape}"
+                    )
+            for jdx, kdx in enumerate(range(i, o, e)):
+                self.atoms[kdx].element = data[jdx][0]
+                self.atoms[kdx].coords = data[jdx][1]
+        else:
+            raise TypeError(
+                    f"Molecule.__setitem__() The argument {idx} is not an "
+                    "integer or a slice object."
+            )
     
     def toggle_selection(self) -> None:
         """ Method to activate/deactivate atoms in the molecule
@@ -611,6 +747,9 @@ class Molecule(object):
         for b in set(bonds):
             self.bonds.append([ int(i) for i in b.split(",") ])
         
+        # Sort the bonds
+        self.bonds.sort(key=lambda k: (k[0], k[1]))
+        
         self.graph = MolecularGraph(num_atoms, self.bonds)
 
         return dist_mat
@@ -737,6 +876,45 @@ class Molecule(object):
 
         return self.dihedrals
 
+    def get_torsions(self, force : bool = False) -> list:
+        """ Method to get the list of torsions in the molecule
+        
+        Parameters
+        ----------
+        force : bool
+            Force the recalculation of the torsions?
+        
+        Returns
+        -------
+        torsions : list
+            List of torsions
+        """
+        if (not force and
+            len(self.torsions) != 0 and
+            len(self.dihedrals) != 0 and 
+            len(self.angles) != 0 and 
+            len(self.bonds) != 0):
+            return self.torsions
+        
+        if len(self.dihedrals) == 0:
+            self.get_dihedrals()
+
+        self.torsions = []
+
+        # Get all the rings in the molecule
+        rings = self.graph.get_rings()
+
+        potential = []
+        # Iterate over all dihedrals (reference atoms)
+        for d in self.dihedrals:
+            temp = sorted(d[1:3])
+            if temp not in potential:
+                potential.append(temp)
+
+        self.torsions = potential.copy()
+
+        return self.torsions
+
     def move_molecule(self, direction : np.ndarray) -> None:
         """ Method to move the molecule
 
@@ -755,9 +933,11 @@ class Molecule(object):
             # Compute the new coordinates
             new_coords = position + direction
             # Set the new coordinates
-            a.set_coordinates(  x=new_coords[0],
-                                y=new_coords[1],
-                                z=new_coords[2])
+            a.set_coordinates(
+                x=new_coords[0],
+                y=new_coords[1],
+                z=new_coords[2]
+            )
     
     def move_selected_atoms(self, direction : np.ndarray) -> None:
         """ Method to move some atoms of the molecule
@@ -876,10 +1056,106 @@ class Molecule(object):
                                 z=new_coords[2])
         
         self.move_molecule(mol_center)
+
+    def rotate_molecule_over_atom_axis(self,
+                                       rotation_axis : np.ndarray,
+                                       angle : float,
+                                       atom : int) -> None:
+        """ Method to rotate the molecule around an atom
+
+        Rotates the molecule according to its Euler angles over an atom
+
+        Parameters
+        ----------
+        rotation_axis : ndarray
+            A NumPy array with the X, Y, Z coordinates of the vector
+            to be used as rotation axis. Keep in mind that the
+            molecule has to be taken to the origin to make these
+            rotations.
+        angle : float
+            The angle of rotation (in degrees).
+        atom : int
+            The number of atom to be used as rotation point.
+        """
+        rotation_point = self.atoms[atom].get_coordinates()
+
+        self.move_molecule(-1 * rotation_point)
+
+        # Create rotation operator
+        r = R.from_rotvec(rotation_axis * angle, degrees=True)
+
+        # Iterate over all atoms in the molecule ...
+        for a in self.atoms:
+            # Extract the atomic coordinates
+            position = a.get_coordinates()
+            # Compute the new coordinates
+            new_coords = r.as_matrix() @ position
+            # Set the new coordinates
+            a.set_coordinates(  x=new_coords[0],
+                                y=new_coords[1],
+                                z=new_coords[2])
+        
+        self.move_molecule(rotation_point)
     
-    def rotate_molecule_over_atom(self,
-                                  euler_angles : np.ndarray,
-                                  atom : int) -> None:
+    def rotate_selected_atoms_over_atom_axis(self,
+                                             rotation_axis : np.ndarray,
+                                             angle : float,
+                                             atom : int) -> None:
+        """ Method to rotate some atoms around an atom
+
+        Rotates the selected atoms according to the Euler angles
+        over an atom
+
+        Raises
+        ------
+        ValueError
+            If one of the selected atoms for rotation is selected as
+            pivot for rotation.
+
+        Parameters
+        ----------
+        rotation_axis : ndarray
+            A NumPy array with the X, Y, Z coordinates of the vector
+            to be used as rotation axis. Keep in mind that the
+            selected atoms have to be taken to the origin to make
+            these rotations.
+        angle : float
+            The angle of rotation (in degrees).
+        atom : int
+            The number of atom to be used as rotation point.
+        """
+        # Sanity check
+        for i, a in enumerate(self.atoms):
+            if i == atom and a.flag:
+                raise ValueError("Molecule."
+                                 "rotate_selected_atoms_over_atom_axis()"
+                                 " The selected atom should not be one of"
+                                 " the rotated atoms!")
+
+        rotation_point = self.atoms[atom].get_coordinates()
+
+        self.move_molecule(-1 * rotation_point)
+
+        # Create rotation operator
+        r = R.from_rotvec(rotation_axis * angle, degrees=True)
+
+        # Iterate over all atoms in the molecule ...
+        for a in self.atoms:
+            if a.flag:
+                # Extract the atomic coordinates
+                position = a.get_coordinates()
+                # Compute the new coordinates
+                new_coords = r.as_matrix() @ position
+                # Set the new coordinates
+                a.set_coordinates(  x=new_coords[0],
+                                    y=new_coords[1],
+                                    z=new_coords[2])
+        
+        self.move_molecule(rotation_point)
+    
+    def rotate_molecule_over_atom_euler(self,
+                                        euler_angles : np.ndarray,
+                                        atom : int) -> None:
         """ Method to rotate the molecule around an atom
 
         Rotates the molecule according to its Euler angles over an atom
@@ -914,9 +1190,9 @@ class Molecule(object):
         
         self.move_molecule(rotation_point)
     
-    def rotate_selected_atoms_over_atom(self,
-                                        euler_angles : np.ndarray,
-                                        atom : int) -> None:
+    def rotate_selected_atoms_over_atom_euler(self,
+                                              euler_angles : np.ndarray,
+                                              atom : int) -> None:
         """ Method to rotate some atoms around an atom
 
         Rotates the selected atoms according to the Euler angles
@@ -1284,6 +1560,67 @@ class Molecule(object):
         centro *= (1.0/len(self.atoms))
 
         return centro
+    
+    def compute_inertia_tensor(self, bohr : bool = False) -> tuple:
+        """ Method to compute the inertia tensor of the molecule
+
+        This method computes the inertia tensor of the molecule,
+        its eigenvalues and eigenvectors, and also returns the
+        shifted atomic coordinates (to the center of mass).
+
+        Parameters
+        ----------
+        bohr : bool
+            Should the calculation be done in Bohr, instead of
+            Angstrom?
+
+        Returns
+        -------
+        inertia_tensor : ndarray
+            The inertia tensor of the molecule.
+        eig_val : ndarray
+            The eigenvalues of the inertia tensor.
+        eig_vec : ndarray
+            The eigenvectors of the inertia tensor.
+        shifted_atoms : list
+            A list with the shifted atomic coordinates.
+        """
+        # Get the coordinates of all the atoms
+        atoms = self.get_coords()
+        atoms = [(a[0], np.array([*a[1:4]])) for a in atoms]
+
+        # Center of mass
+        com = self.get_center_of_mass()
+
+        # Shift all atoms to the center of mass
+        if bohr:
+            b = cts.physical_constants['Bohr radius'][0] * 1E10
+            shifted_atoms = [[a[0], (a[1] - com) / b] for a in atoms]
+        else:
+            shifted_atoms = [[a[0], a[1] - com] for a in atoms]
+
+        # Build the inertia tensor
+        Ixx = Iyy = Izz = Ixy = Ixz = Iyz = 0.0
+
+        for a in shifted_atoms:
+            Ixx += PERIODIC_TABLE.loc[a[0], "AtomicMass"] * (a[1][1]**2 + a[1][2]**2)
+            Iyy += PERIODIC_TABLE.loc[a[0], "AtomicMass"] * (a[1][0]**2 + a[1][2]**2)
+            Izz += PERIODIC_TABLE.loc[a[0], "AtomicMass"] * (a[1][0]**2 + a[1][1]**2)
+
+            Ixy += PERIODIC_TABLE.loc[a[0], "AtomicMass"] * (a[1][0] * a[1][1])
+            Ixz += PERIODIC_TABLE.loc[a[0], "AtomicMass"] * (a[1][0] * a[1][2])
+            Iyz += PERIODIC_TABLE.loc[a[0], "AtomicMass"] * (a[1][1] * a[1][2])
+        
+        inertia_tensor = np.array([
+            [ Ixx, -Ixy, -Ixz],
+            [-Ixy,  Iyy, -Iyz],
+            [-Ixz, -Iyz,  Izz]
+        ])
+
+        # Diagonalize the inertia tensor
+        eig_val, eig_vec = np.linalg.eigh(inertia_tensor)
+
+        return inertia_tensor, eig_val, eig_vec, shifted_atoms
 
     def read_xyz(self, file_name : str) -> None:
         """ Get molecule info from XYZ file

@@ -84,7 +84,7 @@ class Structure:
                                     " not an instance of Atom.")
                 # Add it to the structure
                 self.atoms.append(a)
-        
+    
     def distance_matrix(self) -> None:
         """ Method to get the distances between pairs of atoms
         """
@@ -108,7 +108,7 @@ class Structure:
                     self.dist_mat[i][j] = np.linalg.norm(ai.coords - aj.coords)
 
                     # Check if it's a bond
-                    if self.dist_mat[i][j] < ai.radius + aj.radius:
+                    if self.dist_mat[i][j] < (ai.radius + aj.radius) * 1.1:
                         # Create bond pair
                         if i < j:
                             bond_pair = (i, j)
@@ -118,13 +118,19 @@ class Structure:
                         if bond_pair not in self.bonds:
                             self.bonds.append(bond_pair)
     
-    def get_sub_structure(self) -> Molecule | Collection:
+    def get_sub_structure(self, force : bool = False) -> Molecule | Collection:
         """ Method to get the sub-structures of the given structure
 
         This means, it will return a Molecule or a Collection object.
         If the connecitivity list has more than one element,
         then it's a collection. However, if it has one element,
         it may be a molecule, or an atom.
+
+        Parameters
+        ----------
+        force : bool
+            If 'force' is True, then the non-bonded atoms will be ignored
+            when constructing the molecules in the collection.
 
         Returns
         -------
@@ -138,7 +144,7 @@ class Structure:
             self.distance_matrix()
 
         # Get the connectivity
-        graph = MolecularGraph(len(self.atoms), self.bonds)
+        graph = MolecularGraph(len(self.atoms), self.bonds, force)
         sub_graphs = graph.get_connectivity()
 
         # Check if there are any substructures
