@@ -146,19 +146,17 @@ class Atom(object):
             A flag to denote if the atom has been selected or not
         """
         if element in all_symbols:
-            self.element = element
+            self._element = element
         else:
             raise ValueError((f"Atom.__init__() The symbol {element} does not "
                 "correspond to any element in the Periodic Table."))
         
-        radius = PERIODIC_TABLE.loc[self.element, "AtomicRadius"]
-        mass = PERIODIC_TABLE.loc[self.element, "AtomicMass"]
-
-        self.coords = np.array([x,y,z])
+        self._coords = np.array([x,y,z])
         self.charge = charge
         self.flag = flag
-        self.radius = (radius / BOHR) / 100
-        self.mass = mass
+
+        self._update_properties()
+
         self.bonded_atoms = []
 
     def __repr__(self) -> str:
@@ -174,51 +172,167 @@ class Atom(object):
                 The atom's element symbol, its coordinates
                 and its flag
         """
-        text = (f" {self.element} {self.coords[0]:16.8f} "
-                f"{self.coords[1]:16.8f} {self.coords[2]:16.8f}"
+        text = (f" {self._element} {self._coords[0]:16.8f} "
+                f"{self._coords[1]:16.8f} {self._coords[2]:16.8f}"
                 f" q(+/-) {self.charge:16.8f} "
                 f" [{'*' if self.flag else ' '}]")
         return text
     
-    def swap_element(self,
-                      element : str):
+    def __get_mass(self) -> float:
+        """
+        Get the mass of an atom.
+
+        Returns
+        -------
+        mass : float
+            Mass of the atom.
+        """
+        return PERIODIC_TABLE.loc[self._element, "AtomicMass"]
+    
+    def __get_electron_configuration(self) -> dict:
+        """
+        Get the electron configuration of an atom.
+
+        Returns
+        -------
+        electron_configuration : dict
+            Electron configuration of the atom.
+        """
+        # Get the electron configuration of the atom
+        ec = PERIODIC_TABLE.loc[self._element, "ElectronConfiguration"]
+
+        # If it's not H or He, remove the lower shells
+        if "]" in ec:
+            ec = ec.split("]")[1]
+        
+        # If the electron configuration is not fully defined
+        if "(" in ec:
+            ec = ec.split("(")[0]
+        
+        # Split the electron configuration into orbital types
+        orb_types = ec.split(" ")
+
+        # Remove any empty strings
+        orb_types = [orb for orb in orb_types if orb != ""]
+
+        # Create a dictionary with the orbital types as keys
+        # and the number of electrons as values
+        electron_configuration = {}
+        for orb_type in orb_types:
+            electron_configuration[orb_type] = int(orb_type[-1])
+            
+        return electron_configuration
+    
+    def __get_electronegativity(self) -> float:
+        """
+        Get the electronegativity of an atom.
+
+        Parameters
+        ----------
+        element : str
+            The symbol of the element of the atom.
+
+        Returns
+        -------
+        electronegativity : int
+            Valence of the atom.
+        """
+        # Get the electronegativity of the atom
+        en = PERIODIC_TABLE.loc[self._element, "Electronegativity"]
+
+        # Check if the value exists
+        if en != "":
+            return float(en)
+        else:
+            raise ValueError(
+                    "Atom.__get_electronegativity(): "
+                    f"Electronegativity not found for {self._element}")
+    
+    def __get_atomic_radius(self) -> float:
+        """
+        Get the atomic radius of an atom.
+
+        Returns
+        -------
+        atomic_radius : float
+            Atomic radius of the atom.
+        """
+        # Get the atomic radius of the atom
+        ar = PERIODIC_TABLE.loc[self._element, "AtomicRadius"]
+
+        # Check if the value exists
+        if ar != "":
+            return (float(ar) / BOHR) / 100
+        else:
+            raise ValueError(
+                    "Atom.__get_atomic_radius(): "
+                    f"Atomic radius not found for {self._element}")
+    
+    def __get_oxidation_states(self) -> list:
+        """
+        Get the oxidation states of an atom.
+
+        Returns
+        -------
+        oxidation_states : list
+            Oxidation states of the atom.
+        """
+        # Get the oxidation states of the atom
+        oxs = PERIODIC_TABLE.loc[self._element, "OxidationStates"]
+
+        # Check if the value exists
+        if oxs != "":
+            return [int(ox) for ox in oxs.split(",")]
+        else:
+            raise ValueError(
+                    "Atom.__get_oxidation_states(): "
+                    f"Oxidation states not found for {self._element}")
+    
+    def _update_properties(self):
+        """
+        Update the properties of the atom.
+        """
+        self.radius = self.__get_atomic_radius()
+        self.mass = self.__get_mass()
+        self.electronegativity = self.__get_electronegativity()
+        self.oxidation_states = self.__get_oxidation_states()
+    
+    @property
+    def element(self) -> str:
+        """ Method to get the Atom's element symbol
+
+        Returns
+        -------
+        element : str
+            The atom's element symbol
+        """
+        return self._element
+    
+    @element.setter
+    def element(self, element : str):
         """ Method to update the Atom's element symbol
 
         Parameters
         ----------
         element : str
             The atom's element symbol
+        
+        Raises
+        ------
+        TypeError
+            If the element symbol does not correspond to any element
+            in the Periodic Table
         """
         if element in all_symbols:
-            self.element = element
+            self._element = element
         else:
-            raise TypeError((f"Atom.swap_element() The symbol {element} "
+            raise TypeError((f"Atom.element.setter() The symbol {element} "
                 "does not correspond to any element in the Periodic Table."))
         
-        radius = PERIODIC_TABLE.loc[self.element, "AtomicRadius"]
-        mass = PERIODIC_TABLE.loc[self.element, "AtomicMass"]
-
-        self.radius = (radius / BOHR) / 100
-        self.mass = mass
-
-    def set_coordinates(self,
-                        x : float,
-                        y : float,
-                        z : float):
-        """ Method to update the Atom's coordinates
-        
-        Parameters
-        ----------
-        x : float
-            The atom's X coordinate
-        y : float
-            The atom's Y coordinate
-        z : float
-            The atom's Z coordinate
-        """
-        self.coords = np.array([x, y, z])
-
-    def get_coordinates(self) -> np.ndarray:
+        self._update_properties()
+    
+    @property
+    def coordinates(self) -> np.ndarray:
         """ Method to get the Atom's coordinates
     
         Returns
@@ -226,7 +340,73 @@ class Atom(object):
         coords : ndarray
             NumPy array with the X, Y and Z coordinates as `float`
         """
-        return self.coords
+        return self._coords
+    
+    @coordinates.setter
+    def coordinates(self, *args):
+        """ Method to update the Atom's coordinates
+        
+        Parameters
+        ----------
+        coords : numpy.ndarray, dictionary, list, tuple or individual entries
+                - If it is a NumPy array, it must have the X, Y and Z
+                coordinates as `float`
+                - If it is a dictionary, it must have keys for X, Y and Z
+                coordinates, and all values as `float`
+                - If it is a list, it must have the X, Y and Z coordinates
+                as `float`
+                - If it is a tuple, it must have the X, Y and Z coordinates
+                as `float`
+                - If it is individual entries, it must be 3 entries representing
+                the X, Y and Z coordinates as `float`
+        
+        Raises
+        ------
+        TypeError
+            If the provided coordinates are not a NumPy array, a dictionary,
+            a list, a tuple or 3 entries
+        """
+        if len(args) == 1:
+            if len(args[0]) != 3:
+                raise TypeError("Atom.coordinates.setter(): "
+                                "Coordinates must be a 3D vector. "
+                                f"Received {len(args[0])} entries.")
+            else:
+                if isinstance(args[0], np.ndarray):
+                    coords = args[0]
+                elif isinstance(args[0], dict):
+                    if "x" not in args[0] or \
+                        "y" not in args[0] or \
+                        "z" not in args[0]:
+                        raise TypeError("Atom.coordinates.setter(): "
+                                        "The dictionary should contain keys "
+                                        "for x, y and z coordinates.")
+                    coords = np.array([args[0]["x"], args[0]["y"], args[0]["z"]])
+                elif isinstance(args[0], list):
+                    coords = np.array(args[0])
+                elif isinstance(args[0], tuple):
+                    coords = np.array(args[0])
+                else:
+                    raise TypeError("Atom.coordinates.setter(): "
+                                    "Coordinates must be a NumPy vector, "
+                                    "a list or a tuple.")
+        elif len(args) == 3:
+            if isinstance(args[0], float) and \
+                isinstance(args[1], float) and \
+                isinstance(args[2], float):
+                coords = np.array([args[0], args[1], args[2]])
+            else:
+                raise TypeError("Atom.coordinates.setter(): "
+                                "Coordinates must be 3 float entries.")
+        else:
+            raise TypeError("Atom.coordinates.setter(): "
+                            "Coordinates must be one 3D NumPy vector, "
+                            "one 3-item dictionary with 'x', 'y' and 'z' keys, "
+                            "one 3-item list, one 3-item tuple, or "
+                            "3 float entries. "
+                            f"Received {len(args)} entries.")
+
+        self._coords = coords
 
     def move_atom(self, v_move : np.ndarray) -> None:
         """ Method to move the Atom's coordinates
@@ -236,7 +416,7 @@ class Atom(object):
         v_move : ndarray
             NumPy array with the X, Y and Z coordinates as `float`
         """
-        self.coords += v_move
+        self._coords += v_move
     
     def sphere_grid(self,
                     r : float = 1,
@@ -308,6 +488,101 @@ class Atom(object):
             A list with the ID of the bonded atoms
         """
         return self.bonded_atoms
+    
+    def get_valence(self, expand : int = 0) -> int:
+        """ Method to compute the valence of an atom
+
+        Parameters
+        ----------
+        expand : int
+            The number of lone pairs that should be added to the valence
+
+        Returns
+        -------
+        valence : int
+            The valence of the atom
+        lone_pairs : int
+            How many pairs of electrons should not be bonded
+        valence_orbital_capacity : int
+            The number of electrons that fit in the valence shell
+        """
+        # Number of electrons in each orbital
+        orbital_capacity = {
+            "s" : 2,
+            "p" : 6,
+            "d" : 10,
+            "f" : 14,
+            "g" : 18
+        }
+
+        # Orbitals per shell
+        orbital_filling = {
+            "1s" : ["1s"],
+            "2s" : ["2s", "2p"],
+            "3s" : ["3s", "3p"],
+            "4s" : ["4s", "3d", "4p"],
+            "5s" : ["5s", "4d", "5p"],
+            "6s" : ["6s", "4f", "5d", "6p"],
+            "7s" : ["7s", "5f", "6d", "7p"],
+            "8s" : ["8s", "5g", "6f", "7d", "8p"]
+        }
+
+        # Get the electron configuration
+        e_config = self.__get_electron_configuration()
+
+        # Calculate how many valence electrons does the atom have
+        all_valence_electrons = 0
+
+        # ... and also get the shell
+        shell = ""
+
+        for ke, ve in e_config.items():
+            all_valence_electrons += ve
+            if "s" in ke:
+                shell = ke[:-1]
+
+        # Calculate how many electrons I can put in this shell
+        valence_orbital_capacity = 0
+        
+        for orb in orbital_filling[shell]:
+            valence_orbital_capacity += orbital_capacity[orb[-1]]
+        
+        # Calculate the valence
+        # (or how many bonds does it take to fill up the shell)
+        valence = valence_orbital_capacity - all_valence_electrons
+
+        # If the capacity of the shell is larger than the number of
+        # electrons I can get from covalently-bonding all valence electrons,
+        # set the valence to the number of valence electrons
+        if valence > all_valence_electrons:
+            valence = all_valence_electrons
+
+        # If I did as many covalent bonds as active valence electrons,
+        # how many lone pairs do I have?
+        lone_pairs = (all_valence_electrons - valence) // 2
+
+        # Expand the valence
+        if expand > 0:
+
+            # Check if there are enough lone pairs
+            if lone_pairs == 0:
+                raise ValueError("Atom.get_valence() There are no lone pairs "
+                                "to expand the valence with.")
+        
+            if expand > lone_pairs:
+                raise ValueError("Atom.get_valence() There are not enough lone "
+                                "pairs to expand the valence with.")
+        
+            # Expand the valence
+            valence += 2 * expand
+            lone_pairs -= expand
+        
+        assert valence + 2 * lone_pairs == all_valence_electrons, (
+            "Atom.get_valence() The valence and the number of lone pairs "
+            "do not add up to the number of valence electrons."
+        )
+
+        return valence, lone_pairs, valence_orbital_capacity
 
 if __name__ == "__main__":
     # Do something if this file is invoked on its own

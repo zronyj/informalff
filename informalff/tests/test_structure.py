@@ -113,11 +113,11 @@ def test_structure_read_xyz(methane_molecule, methanol_molecule):
     assert isinstance(collb, informalff.Collection)
 
     atoms1 = len(mol1.atoms) == len(mol1b.atoms)
-    weight1 = mol1.get_mol_weight() == mol1b.get_mol_weight()
+    weight1 = mol1.mol_weight == mol1b.mol_weight
     center1 = sum(mol1.get_center() - mol1b.get_center()) == 0.0
 
     atoms2 = len(mol2.atoms) == len(mol2b.atoms)
-    weight2 = mol2.get_mol_weight() == mol2b.get_mol_weight()
+    weight2 = mol2.mol_weight == mol2b.mol_weight
     center2 = sum(mol2.get_center() - mol2b.get_center()) == 0.0
 
     assert atoms1 and weight1 and center1

@@ -1,8 +1,7 @@
 import os                            # To navigate the file system
 import shutil                        # To do some operation over the file system
+import tempfile                      # To create files in the OS' temp directory
 import time                          # A way to keep track of time
-import json                          # To parse json files
-import warnings                      # To throw warnings instead of raising errors
 import numpy as np                   # To handle numerical calculations
 import multiprocessing as mp         # To be able to run things in parallel
 
@@ -31,7 +30,8 @@ class QM_driver(ABC):
     def __init__(self,
                  qm_props : dict,
                  sub_structure : Molecule | Collection,
-                 calc_name : str = 'QM_calculation'):
+                 calc_name : str = 'QM_calculation',
+                 verbose : bool = False):
         """ QM_driver constructor method
         
         Parameters
@@ -42,6 +42,8 @@ class QM_driver(ABC):
             A Molecule or Collection object to create the inputs for Orca
         calc_name : str
             The name to be given to the calculation directory
+        verbose : bool
+            If True, print messages
         """
         self.props = qm_props
         self.sub_structure = sub_structure
@@ -50,7 +52,7 @@ class QM_driver(ABC):
     def __save_frequencies(self,
                          eigenvalues : np.ndarray,
                          path : str,
-                         shape : str = "") -> np.ndarray:
+                         save : bool = True) -> np.ndarray:
         """ Method to save frequencies to a text file
         
         This method will save the frequencies provided
@@ -63,6 +65,8 @@ class QM_driver(ABC):
             A numpy array with the eigenvalues of the Hessian
         path : str
             The path where the frequencies should be saved
+        save : bool
+            If True, the frequencies will be saved
         
         Returns
         -------
@@ -107,22 +111,25 @@ class QM_driver(ABC):
         freq /= cts.c
         freq *= 1e-2
 
-        line_width = 42
-        output = ""
-        output += "-" * line_width + "\n"
-        output += f"{'Frequencies':^{line_width}}\n"
-        output += "-" * line_width + "\n"
-        # Translations / Rotations
-        for j in range(zeros):
-            output += f"{j:^6}\t{0:>16.8f} cm^-1\n"
-        for i, f in enumerate(freq):
-            if f.real == 0 and f.imag != 0:
-                output += f"{i+zeros:^6}\t{-1 * f.imag:>16.8f} cm^-1  ! imag !\n"
-            else:
-                output += f"{i+zeros:^6}\t{f.real:>16.8f} cm^-1\n"
-        output += "-" * line_width + "\n"
-        with open(os.path.join(path, 'frequencies.txt'), 'w') as f:
-            f.write(output)
+        if save:
+            # Header
+            line_width = 42
+            output = ""
+            output += "-" * line_width + "\n"
+            output += f"{'Frequencies':^{line_width}}\n"
+            output += "-" * line_width + "\n"
+
+            # Translations / Rotations
+            for j in range(zeros):
+                output += f"{j:^6}\t{0:>16.8f} cm^-1\n"
+            for i, f in enumerate(freq):
+                if f.real == 0 and f.imag != 0:
+                    output += f"{i+zeros:^6}\t{-1 * f.imag:>16.8f} cm^-1  ! imag !\n"
+                else:
+                    output += f"{i+zeros:^6}\t{f.real:>16.8f} cm^-1\n"
+            output += "-" * line_width + "\n"
+            with open(os.path.join(path, 'frequencies.txt'), 'w') as f:
+                f.write(output)
         
         return freq
     
@@ -282,7 +289,7 @@ class QM_driver(ABC):
 
     def _compute_trans_rot(self,
                            masses : np.ndarray,
-                           bohr : bool = True) -> np.ndarray:
+                           bohr : bool = True) -> list[np.ndarray]:
         """
         Method to compute the translational and rotational
         displacements independently.
@@ -297,9 +304,9 @@ class QM_driver(ABC):
         
         Returns
         -------
-        D : np.ndarray
-            A numpy array with the translational and rotational
-            displacements
+        D : list[np.ndarray]
+            A list of numpy arrays with the translational and
+            rotational displacements
         """
 
         # Displacements (translations [3] and rotations [3] = 6)
@@ -337,6 +344,8 @@ class QM_driver(ABC):
         P = np.array(coords).dot(X)
         cx, cy, cz = P.T
 
+        masses = np.sqrt(np.array(masses))
+
         for i, m in enumerate(masses):
 
             for j in range(3):
@@ -359,12 +368,274 @@ class QM_driver(ABC):
         # Converting the displacements to numpy arrays
         D = [np.array(d) for d in D]
 
+        D[3] /= BOHR2ANG
+        D[4] /= BOHR2ANG
+        D[5] /= BOHR2ANG
+
         if shape == "LINEAR":
             return D[:5], shape
         elif shape == "SINGLE_ATOM":
             return D[:3], shape
         else:
             return D, shape
+    
+    def __accu_hess(
+            self,
+            delta : float = 5e-3 * BOHR2ANG,
+            n_cores : int = mp.cpu_count()
+            ) -> tuple:
+        r""" Method to compute the numerical hessian of the
+        given structure, using the QM engine.
+        
+        This method will compute the numerical hessian of
+        the current sub_structure using a finite difference
+        approximation. It will also compute the points required
+        for a Gradient, but the idea is to have enough data
+        to fit a polynomial surface and use its derivatives.
+        
+        Parameters
+        ----------
+        delta : float
+            The displacement to be used for the finite
+            difference approach, in Angstrom (1 Bohr = 0.529177 A)
+        n_cores : int
+            The number of cores to be used for the parallel
+            execution of the calculations.
+        
+        Returns
+        -------
+        dict
+            A dictionary with the Hessian matrix, and
+            the path of the working directory.
+        
+        Notes
+        -----
+        The fitting of the 2D surface to the 9 points per derivative
+        is done with the Least Squares functionality of NumPy.
+        Consider the following:
+
+        .. math::
+            f\left(q_{1}, q_{2}\right) =
+                a \cdot q_{1}^2 *         +
+                b \cdot         * q_{2}^2 +
+                c \cdot q_{1}   * q_{2}   +
+                d \cdot q_{1}             +
+                e \cdot        q_{2}      +
+                f
+        
+        This is the polynomial to be fitted. It uses 9 coefficients,
+        which means that the system of equations is exact in the worst
+        of cases.
+        """
+        here = os.getcwd()
+        tmp_dir = tempfile.gettempdir()
+
+        # Create a temporary working directory
+        work = os.path.join(tmp_dir, f'QM_Hessian_AH_{int(time.time())}')
+        if os.path.exists(work):
+            shutil.rmtree(work)
+        os.mkdir(work)
+        os.chdir(work)
+
+        # Dictionary to keep track of all paths
+        paths = {}
+
+        # First, run the base calculation
+        paths[f"_base"] = self.create_input(f"_base")
+        self.run_calculation(paths[f"_base"])
+        base_results = self.parse_output(paths[f"_base"])
+        E_base = base_results['Energy[SCF]']
+
+        # Get the number of atoms, and prepare the displacements
+        n_atoms = self.sub_structure.get_num_atoms()
+
+        # Keep a reference to the original structure
+        reference = deepcopy(self.sub_structure)
+
+        # Loop over each atom
+        for a in range(n_atoms):
+            # Loop over all 3 dimensions
+            for i, q in enumerate('xyz'):
+                # Loop over each atom
+                for b in range(a, n_atoms):
+                    # Loop over all 3 dimensions
+                    for j, p in enumerate('xyz'):
+
+                        # Compute the displacement and create
+                        # the inputs for the calculation
+
+                        # Positive-zero
+                        self.sub_structure = deepcopy(reference)
+                        self.sub_structure[a][1][i] += delta
+                        paths[f"_{a}p{q}_{b}--"] = self.create_input(
+                                                    f"_{a}p{q}_{b}--",
+                                                    ref_path=paths[f"_base"]
+                                                    )
+                        
+                        # Zero-positive
+                        self.sub_structure = deepcopy(reference)
+                        self.sub_structure[b][1][j] += delta
+                        paths[f"_{a}--_{b}p{p}"] = self.create_input(
+                                                    f"_{a}--_{b}p{p}",
+                                                    ref_path=paths[f"_base"]
+                                                    )
+
+                        # Positive-positive
+                        self.sub_structure = deepcopy(reference)
+                        self.sub_structure[a][1][i] += delta
+                        self.sub_structure[b][1][j] += delta
+                        paths[f"_{a}p{q}_{b}p{p}"] = self.create_input(
+                                                    f"_{a}p{q}_{b}p{p}",
+                                                    ref_path=paths[f"_base"]
+                                                    )
+                        # Positive-negative
+                        self.sub_structure = deepcopy(reference)
+                        self.sub_structure[a][1][i] += delta
+                        self.sub_structure[b][1][j] -= delta
+                        paths[f"_{a}p{q}_{b}n{p}"] = self.create_input(
+                                                    f"_{a}p{q}_{b}n{p}",
+                                                    ref_path=paths[f"_base"]
+                                                    )
+                        # Negative-positive
+                        self.sub_structure = deepcopy(reference)
+                        self.sub_structure[a][1][i] -= delta
+                        self.sub_structure[b][1][j] += delta
+                        paths[f"_{a}n{q}_{b}p{p}"] = self.create_input(
+                                                    f"_{a}n{q}_{b}p{p}",
+                                                    ref_path=paths[f"_base"]
+                                                    )
+                        # Negative-negative
+                        self.sub_structure = deepcopy(reference)
+                        self.sub_structure[a][1][i] -= delta
+                        self.sub_structure[b][1][j] -= delta
+                        paths[f"_{a}n{q}_{b}n{p}"] = self.create_input(
+                                                    f"_{a}n{q}_{b}n{p}",
+                                                    ref_path=paths[f"_base"]
+                                                    )
+                        
+                        # Negative-zero
+                        self.sub_structure = deepcopy(reference)
+                        self.sub_structure[a][1][i] -= delta
+                        paths[f"_{a}n{q}_{b}--"] = self.create_input(
+                                                    f"_{a}n{q}_{b}--",
+                                                    ref_path=paths[f"_base"]
+                                                    )
+                        
+                        # Zero-negative
+                        self.sub_structure = deepcopy(reference)
+                        self.sub_structure[b][1][j] -= delta
+                        paths[f"_{a}--_{b}n{p}"] = self.create_input(
+                                                    f"_{a}--_{b}n{p}",
+                                                    ref_path=paths[f"_base"]
+                                                    )
+        
+        # Restore the original structure
+        self.sub_structure = deepcopy(reference)
+
+        if self.verbose:
+            print(("\nComputing the displacements for the Hessian"
+                  f"using {n_cores} cores"), end=" ... ", flush=True)
+        if n_cores == 1:
+            results = []
+            for k, v in tqdm(paths.items()):
+                self.run_calculation(v)
+                res = self.parse_output(v)
+                results.append((k, res['Energy[SCF]']))
+        else:
+
+            # Define the worker function for parallel execution
+            global worker
+            def worker(kvp : tuple) -> tuple:
+                self.run_calculation(kvp[1])
+                results = self.parse_output(kvp[1])
+                return (kvp[0], results['Energy[SCF]'])
+            
+            # Run the calculations in parallel
+            pool = mp.Pool(n_cores)
+
+            results = list(
+                        tqdm(
+                            pool.imap_unordered(
+                                worker,
+                                [(k, v) for k, v in paths.items()]
+                            ),
+                            total = len(paths),
+                            disable = not self.verbose
+                        )
+                    )
+            pool.close()
+            pool.join()
+            
+            # with mp.Pool(n_cores) as pool:
+            #     results = pool.map(worker, [(k, v) for k, v in paths.items()])
+
+        if self.verbose:
+            print("done.\n", flush=True)
+
+        # Switch back to the base directory
+        os.chdir(here)
+
+        # Create an empty Hessian matrix
+        hess = np.zeros((n_atoms * 3, n_atoms * 3))
+
+        # Delta in bohr
+        delta_bohr = delta * BOHR
+
+        energies = {k: v for k, v in results}
+        for a in range(n_atoms):
+            for i, q in enumerate('xyz'):
+                for b in range(a, n_atoms):
+                    for j, p in enumerate('xyz'):
+
+                        # Hessian indices
+                        xx = a*3 + i
+                        yy = b*3 + j
+
+                        # Get the energies for this particular atom and direction
+                        E_p0 = energies[f"_{a}p{q}_{b}--"]
+                        E_0p = energies[f"_{a}--_{b}p{p}"]
+                        E_pp = energies[f"_{a}p{q}_{b}p{p}"]
+                        E_pn = energies[f"_{a}p{q}_{b}n{p}"]
+                        E_np = energies[f"_{a}n{q}_{b}p{p}"]
+                        E_nn = energies[f"_{a}n{q}_{b}n{p}"]
+                        E_n0 = energies[f"_{a}n{q}_{b}--"]
+                        E_0n = energies[f"_{a}--_{b}n{p}"]
+
+                        # Fitting the polynomial surface
+                        px = np.linspace(-1,1,3) * delta_bohr
+                        py = np.linspace(-1,1,3) * delta_bohr
+                        pX, pY = np.meshgrid(px, py, copy=False)
+                        pX = pX.flatten()
+                        pY = pY.flatten()
+                        pZ = np.array([
+                            E_nn, E_0n, E_pn,
+                            E_n0, E_base, E_p0,
+                            E_np, E_0p, E_pp
+                        ])
+                        A = np.array([
+                            pX**2,
+                            pY**2,
+                            pX * pY,
+                            pX,
+                            pY,
+                            np.ones(len(pZ))
+                        ]).T
+                        B = pZ.flatten()
+                        coeff, r, rank, s = np.linalg.lstsq(A,B)
+
+                        # Fill the Hessian matrix
+                        if a == b:
+                            if i == j:
+                                hess[xx,xx] = coeff[0] * 2
+                            else:
+                                hess[xx,yy] = hess[yy,xx] = coeff[2] * 2
+                        else:
+                            hess[xx,yy] = hess[yy,xx] = coeff[2]
+
+        return {
+            'hessian' : hess,
+            'work_dir' : work
+        }
     
     def __full_hess(
             self,
@@ -395,9 +666,10 @@ class QM_driver(ABC):
             the path of the working directory.
         """
         here = os.getcwd()
+        tmp_dir = tempfile.gettempdir()
 
         # Create a temporary working directory
-        work = os.path.join(here, f'QM_Hessian_FH_{int(time.time())}')
+        work = os.path.join(tmp_dir, f'QM_Hessian_FH_{int(time.time())}')
         if os.path.exists(work):
             shutil.rmtree(work)
         os.mkdir(work)
@@ -466,10 +738,13 @@ class QM_driver(ABC):
         # Restore the original structure
         self.sub_structure = deepcopy(reference)
 
-        print("\nComputing the displacements for the Hessian ...")
+        if self.verbose:
+            print(("\nComputing the displacements for the Hessian"
+                  f"using {n_cores} cores"), end=" ... ", flush=True)
+        
         if n_cores == 1:
             results = []
-            for k, v in tqdm(paths.items()):
+            for k, v in tqdm(paths.items(), disable = not self.verbose):
                 self.run_calculation(v)
                 res = self.parse_output(v)
                 results.append((k, res['Energy[SCF]']))
@@ -490,7 +765,8 @@ class QM_driver(ABC):
                                 worker,
                                 [(k, v) for k, v in paths.items()]
                             ),
-                            total=len(paths)
+                            total = len(paths),
+                            disable = not self.verbose
                         )
                     )
             pool.close()
@@ -499,7 +775,8 @@ class QM_driver(ABC):
             # with mp.Pool(n_cores) as pool:
             #     results = pool.map(worker, [(k, v) for k, v in paths.items()])
 
-        print("... done.\n")
+        if self.verbose:
+            print("done.\n", flush=True)
 
         # Switch back to the base directory
         os.chdir(here)
@@ -527,12 +804,9 @@ class QM_driver(ABC):
                         E_nn = energies[f"_{a}n{q}_{b}n{p}"]
 
                         # Finite difference formula
-                        hess[xx,yy] = (
+                        hess[xx,yy] = hess[yy,xx] = (
                             E_pp - E_pn - E_np + E_nn
                         ) / (4 * delta_bohr**2)
-
-        # Symmetrical matrix        
-        hess = hess + hess.T - np.diag(np.diag(hess))
 
         return {
             'hessian' : hess,
@@ -578,9 +852,10 @@ class QM_driver(ABC):
                              "is not a dictionary.")
         
         here = os.getcwd()
+        tmp_dir = tempfile.gettempdir()
 
         # Create a temporary working directory
-        work = os.path.join(here, f'QM_Hessian_GH_{int(time.time())}')
+        work = os.path.join(tmp_dir, f'QM_Hessian_GH_{int(time.time())}')
         if os.path.exists(work):
             shutil.rmtree(work)
         os.mkdir(work)
@@ -647,10 +922,13 @@ class QM_driver(ABC):
         # Restore the original structure
         self.sub_structure = deepcopy(reference)
 
-        print("\nComputing the displacements for the Hessian ...")
+        if self.verbose:
+            print(("\nComputing the displacements for the Hessian"
+                  f"using {n_cores} cores"), end=" ... ", flush=True)
+        
         if n_cores == 1:
             results = []
-            for k, v in tqdm(paths.items()):
+            for k, v in tqdm(paths.items(), disable = not self.verbose):
                 self.run_calculation(v)
                 res = self.parse_output(v)
                 results.append((k, res['Energy[SCF]']))
@@ -672,13 +950,15 @@ class QM_driver(ABC):
                                 worker,
                                 [(k, v) for k, v in paths.items()]
                             ),
-                            total=len(paths)
+                            total = len(paths),
+                            disable = not self.verbose
                         )
                     )
             pool.close()
             pool.join()
 
-        print("... done.\n")
+        if self.verbose:
+            print("... done.\n", flush=True)
 
         # Switch back to the base directory
         os.chdir(here)
@@ -703,6 +983,9 @@ class QM_driver(ABC):
                         xx = a*3 + i
                         yy = b*3 + j
 
+                        if hess[xx,yy] != 0.0:
+                            continue
+
                         # Get the energies for this particular atom and direction
                         E_pp = energies[f"_{a}p{q}_{b}p{p}"]
                         E_nn = energies[f"_{a}n{q}_{b}n{p}"]
@@ -714,7 +997,7 @@ class QM_driver(ABC):
                         E_0n = pre_grad['displacement_energies'][f"_{b}_{p}_-1"]
 
                         # Finite difference formula
-                        hess[xx,yy] = (
+                        hess[xx,yy] = hess[yy,xx] = (
                             E_pp - E_p0 - E_0p + 2 * E_base - E_n0 - E_0n + E_nn
                         ) / (2 * delta_bohr**2)
         
@@ -729,7 +1012,7 @@ class QM_driver(ABC):
                 hess_diag[a*3 + i] = (E_p - 2 * E_base + E_n) / (delta_bohr**2)
 
         # Symmetrical matrix
-        hess = hess + hess.T + np.diag(hess_diag)
+        hess = hess + np.diag(hess_diag)
 
         return {
             'hessian' : hess,
@@ -877,9 +1160,10 @@ class QM_driver(ABC):
             n_cores = mp.cpu_count()
 
         here = os.getcwd()
+        tmp_dir = tempfile.gettempdir()
 
         # Create a temporary working directory
-        work = os.path.join(here, f'QM_Gradient_{int(time.time())}')
+        work = os.path.join(tmp_dir, f'QM_Gradient_{int(time.time())}')
         if os.path.exists(work):
             shutil.rmtree(work)
         os.mkdir(work)
@@ -928,12 +1212,14 @@ class QM_driver(ABC):
         # Restore the original structure
         self.sub_structure = deepcopy(reference)
 
-        print("\nComputing the displacements for the gradient ...")
+        if self.verbose:
+            print(("\nComputing the displacements for the Hessian"
+                  f"using {n_cores} cores"), end=" ... ", flush=True)
         if n_cores == 1:
 
             # Run the calculations sequentially
             results = []
-            for k, v in tqdm(paths.items()):
+            for k, v in tqdm(paths.items(), disable = not self.verbose):
                 self.run_calculation(v)
                 res = self.parse_output(v)
                 results.append((k, res['Energy[SCF]']))
@@ -954,13 +1240,15 @@ class QM_driver(ABC):
                                 worker,
                                 [(k, v) for k, v in paths.items()]
                             ),
-                            total=len(paths)
+                            total=len(paths),
+                            disable = not self.verbose
                         )
                     )
             pool.close()
             pool.join()
         
-        print("... done.\n")
+        if self.verbose:
+            print("... done.\n", flush=True)
 
         # with mp.Pool(n_cores) as pool:
         #     results = pool.map(worker, [(k, v) for k, v in paths.items()])
@@ -1026,89 +1314,50 @@ class QM_driver(ABC):
             'displacement_energies' : energies,
             'paths' : paths
         }
+    
+    def _hess_postprocessing(
+                self,
+                hess : np.ndarray,
+                accuracy : str,
+                save : bool = True
+                ) -> dict:
+        """
+        Post-processing of the Hessian matrix.
 
-    def num_hessian(
-            self,
-            light : bool = True,
-            delta : float = 5e-3 * BOHR2ANG,
-            n_cores : int = mp.cpu_count(),
-            pre_grad : dict = {}) -> None:
-        """ Method to compute the numerical hessian of the
-        given structure, using the QM engine.
-        
-        This method will compute the numerical hessian of
-        the current sub_structure using a finite difference
-        approach. The calculations will be run in parallel,
-        each in its own folder. The hessian will be mass-weighted,
-        and the frequencies and normal modes will be saved
-        to text files in the working directory.
-        
+        This function will mass-weight the Hessian matrix, remove the
+        linear dependencies, diagonalize the projected-out coordinates,
+        project the Hessian into the internal space, and finally diagonalize
+        the projected-out coordinates to compute the frequencies
+        and normal modes.
+
         Parameters
         ----------
-        light : bool
-            If True, a cheaper finite difference approach
-            will be used, based on pre-computed gradients.
-            If False, the standard approach will be used.
-        delta : float
-            The displacement to be used for the finite
-            difference approach, in Angstrom (1 Bohr = 0.529177 A)
-        n_cores : int
-            The number of cores to be used for the parallel
-            execution of the calculations.
-        pre_grad : dict, optional
-            If you have a previously calculated gradient, please
-            include it here to minimize the number of energy evaluations.
-        
-        Raises
-        ------
-        ValueError
-            If the sub_structure has less than 2 atoms
+        hess : np.ndarray
+            The Hessian matrix
+        accuracy : str
+            The accuracy of the Hessian computation
+        save : bool (default = True)
+            If True, the Hessian matrix, the Mass-weighted Hessian,
+            the Hessian in internal coordinates, the frequencies,
+            and the normal modes will be saved
+
+        Returns
+        -------
+        dict
+            A dictionary with the Hessian matrix, the frequencies,
+            the normal modes, and the working directory
         """
-        if self.sub_structure.get_num_atoms() < 2:
-            raise ValueError("QM_driver.num_hessian() The sub_structure "
-                             "must contain at least 2 atoms to compute "
-                             "a Hessian matrix.")
-
-        if not isinstance(n_cores, int):
-            n_cores = mp.cpu_count()
-
-        if n_cores < 1:
-            n_cores = 1
-
-        if n_cores > mp.cpu_count():
-            n_cores = mp.cpu_count()
-        
-        if light:
-            calc = self.__grad_hess(
-                            delta = delta,
-                            n_cores = n_cores,
-                            pre_grad = pre_grad
-                        )
-        else:
-            calc = self.__full_hess(
-                            delta = delta,
-                            n_cores = n_cores
-                        )
-        
-        hess = calc['hessian']
-        work = calc['work_dir']
-
         # Mass-weighting the Hessian
         nb_atoms = self.sub_structure.get_num_atoms()
 
         masses = np.zeros(nb_atoms)
         i_sqrt_mass = np.zeros(nb_atoms * 3)
         for a in range(nb_atoms):
-            mass = PERIODIC_TABLE.loc[
-                        self.sub_structure[a][0],
-                        "AtomicMass"
-                    ]
-            masses[a] = mass
+            masses[a] = self.sub_structure[a].mass
             for i in range(3):
-                i_sqrt_mass[3*a + i] = 1 / np.sqrt(mass)
+                i_sqrt_mass[3*a + i] = 1 / np.sqrt(masses[a])
     
-        w = np.array(i_sqrt_mass)
-        w = w[:, np.newaxis]
+        w = i_sqrt_mass[:, np.newaxis]
         W = w @ w.T
 
         hess_mw = np.multiply(hess, W)
@@ -1126,7 +1375,7 @@ class QM_driver(ABC):
         # Diagonalize the projected out coordinates to get the internal eigenvectors
         vals, vecs = np.linalg.eigh(P)
 
-        # Remove the vectors with liner dependence among the projected-out coordinates
+        # Remove the vectors with linear dependence among the projected-out coordinates
         bvecs = vecs[:, vals > 1E-7]
 
         # Project the hessian into the internal space
@@ -1137,23 +1386,138 @@ class QM_driver(ABC):
 
         # Computing the modes
         modes = bvecs.dot(eig_vec)
-        self.__save_normal_modes(modes, work)
+
+        # Create the results folder and move there
+        here = os.getcwd()
+        results_dir = os.path.join(here, f'Results_{accuracy}_{int(time.time())}')
+        if not os.path.exists(results_dir):
+            os.mkdir(results_dir)
+        
+        # self.__save_hessian(W, results_dir, mod_name='masses')
 
         # Save the frequencies to a text file
-        freq = self.__save_frequencies(eig_val, work, shape)
+        freq = self.__save_frequencies(eig_val, results_dir, save)
 
-        # Save the untouched mass-weighted hessian to a text file
-        self.__save_hessian(hess_mw, work)
+        if save:
+            # Save the normal modes
+            self.__save_normal_modes(modes, results_dir)
 
-        # Save the projected mass-weighted hessian to a text file
-        self.__save_hessian(hessian, work, projected=True)
+            # Save the untouched hessian to a text file
+            self.__save_hessian(hess, results_dir)
+
+            # Save the mass-weighted hessian to a text file
+            # self.__save_hessian(hess_mw, results_dir, mod_name='mw')
+
+            # Save the projected mass-weighted hessian to a text file
+            self.__save_hessian(hessian, results_dir, projected=True)
 
         return {
-            'hessian' : hess_mw,
+            'hessian' : hess,
             'frequencies' : freq,
             'normal_modes' : modes,
-            'work_dir' : work
         }
+
+    def num_hessian(
+            self,
+            accuracy : str = "medium",
+            delta : float = 5e-3 * BOHR2ANG,
+            n_cores : int = mp.cpu_count(),
+            pre_grad : dict = {}) -> None:
+        r""" Method to compute the numerical hessian of the
+        given structure, using the QM engine.
+        
+        This method will compute the numerical hessian of
+        the current sub_structure using a finite difference
+        approach. The calculations will be run in parallel,
+        each in its own folder. The hessian will be mass-weighted,
+        and the frequencies and normal modes will be saved
+        to text files in the working directory.
+        
+        Parameters
+        ----------
+        accuracy : str
+            If "light", a cheaper finite difference approach
+            will be used, based on pre-computed gradients.
+            If "medium", the standard approach will be used
+            (see equations in the notes).
+            If "high", the gradient and the standard numerical
+            displacements will be used to fit a quadrtic surface
+            and get the derivative from it. 
+        delta : float
+            The displacement to be used for the finite
+            difference approach, in Angstrom (1 Bohr = 0.529177 A)
+        n_cores : int
+            The number of cores to be used for the parallel
+            execution of the calculations.
+        pre_grad : dict, optional
+            If you have a previously calculated gradient, please
+            include it here to minimize the number of energy evaluations.
+        
+        Raises
+        ------
+        ValueError
+            If the sub_structure has less than 2 atoms
+        
+        Notes
+        -----
+        The standard method to compute a Hessian via finite differences
+        uses the following equation:
+
+        .. math::
+            \hat{H}_{x,y} = \frac{
+                            E(x + \delta, y + \delta) -
+                            E(x + \delta, y - \delta) -
+                            E(x - \delta, y + \delta) +
+                            E(x - \delta, y - \delta)
+                            }
+                            {4 \delta^2}
+        """
+        if self.sub_structure.get_num_atoms() < 2:
+            raise ValueError("QM_driver.num_hessian() The sub_structure "
+                             "must contain at least 2 atoms to compute "
+                             "a Hessian matrix.")
+
+        if not isinstance(n_cores, int):
+            n_cores = mp.cpu_count()
+
+        if n_cores < 1:
+            n_cores = 1
+
+        if n_cores > mp.cpu_count():
+            n_cores = mp.cpu_count()
+        
+        if accuracy == "light":
+            calc = self.__grad_hess(
+                            delta = delta,
+                            n_cores = n_cores,
+                            pre_grad = pre_grad
+                        )
+        elif accuracy == "medium":
+            calc = self.__full_hess(
+                            delta = delta,
+                            n_cores = n_cores
+                        )
+        elif accuracy == "high":
+            calc = self.__accu_hess(
+                            delta = delta,
+                            n_cores = n_cores
+                        )
+        else:
+            raise ValueError("QM_driver.num_hessian() The selected "
+                             "accuracy is not a valid option.")
+        
+        
+        hess = calc['hessian']
+        work = calc['work_dir']
+
+        # Mass-weighting, projecting into internal coords,
+        # computing frequencies and normal modes, and saving
+        # all results
+        processed = self._hess_postprocessing(hess, accuracy)
+
+        processed["work_dir"] = work
+
+        return processed
 
 
 class ORCA_driver(QM_driver):
@@ -1220,8 +1584,8 @@ class ORCA_driver(QM_driver):
             placed, and where the Orca calculation should be executed
         """
         # First line(s) of the Orca input file
-        header = (f'! {self.props["method"]} {self.props["basis"]}'
-                  f' {self.props["modifiers"]}\n')
+        header = (f'! {self.props["method"]} {self.props["basis"]} DEFGRID3'
+                  f' TightSCF {self.props["modifiers"]}\n')
         
         # Specifying the name of the XYZ file, ...
         # ... its charge and multiplicity
@@ -1496,6 +1860,12 @@ class PSI4_driver(QM_driver):
             f" {self.props['charge']} {self.props['multipl']}\n"
         )
         
+        # Are there any modifiers
+        if len(self.props['modifiers']) != 0:
+            mods = f'{self.props["modifiers"]}\n'
+        else:
+            mods = ''
+
         # Get all the atoms as a list
         all_atoms = self.sub_structure.get_coords()
         for a in all_atoms:
@@ -1504,6 +1874,8 @@ class PSI4_driver(QM_driver):
         psi4_inp += (' units angstrom\n'
                      f'}}\n\n{xtra_input}'
                      f'set basis {self.props["basis"]}\n'
+                     f'{mods}'
+                     'd_convergence = 1e-8\n'
                      f'E, wfn = energy("{self.props["method"]}"{mod_input}, '
                      'return_wfn=True)\n'
                      'oeprop(wfn, "MULLIKEN_CHARGES", "LOWDIN_CHARGES", '

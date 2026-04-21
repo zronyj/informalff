@@ -1,9 +1,12 @@
 import numpy as np
+import warnings
 
 from .atom import Atom
 from .molecule import Molecule
 from .collection import Collection
 from .graph import MolecularGraph
+from .subroutines.geometries import distance_matrix as get_distance_matrix
+from .subroutines.geometries import get_bonds as get_bond_list
 
 # ------------------------------------------------------- #
 #                   The Structure Class                   #
@@ -43,7 +46,7 @@ class Structure:
             temp = [float(c) if i != 0 else c for i, c in enumerate(temp)]
             self.atoms.append(Atom(*temp))
     
-    def add_atoms(self, *atoms : Atom) -> None:
+    def add_atoms(self, *atoms : Atom | list) -> None:
         """ Method to add atoms to the structure
 
         Adds the specified atom(s) to the Structure object. It
@@ -58,7 +61,7 @@ class Structure:
 
         Parameters
         ----------
-        *atoms
+        *atoms : Atom or list
             A `list` with all the Atom objects to be added to the
             Structure object.
         """
@@ -68,12 +71,25 @@ class Structure:
 
         # If the provided list has only one element
         if len(atoms) == 1:
+
+            # Check if the provided element is a list
+            if isinstance(atoms[0], list):
+                for a in atoms[0]:
+                    # Check if it's an instance of Atom
+                    if not isinstance(a, Atom):
+                        raise TypeError("Structure.add_atoms() The added object is"
+                                        " not an instance of Atom.")
+                    # Add it to the structure
+                    self.atoms.append(a)
+
             # Check if it's an instance of Atom
-            if not isinstance(atoms[0], Atom):
+            elif isinstance(atoms[0], Atom):
+                # Add it to the structure
+                self.atoms.append(atoms[0])
+            
+            else:
                 raise TypeError("Structure.add_atoms() The added object is not"
-                                " an instance of Atom.")
-            # Add it to the structure
-            self.atoms.append(atoms[0])
+                                f" an instance of Atom: {type(atoms[0])}")
 
         # Iterate over all the provided atoms
         else:
@@ -85,38 +101,71 @@ class Structure:
                 # Add it to the structure
                 self.atoms.append(a)
     
-    def distance_matrix(self) -> None:
-        """ Method to get the distances between pairs of atoms
+    def distance_matrix(
+            self,
+            box_size : float = 3.0,
+            distance_tol : float = 1.2) -> None:
         """
-        # Need the number of atoms
-        num_atoms = len(self.atoms)
+        Method to get the distances between pairs of atoms
 
-        # Check if there are any atoms
-        if num_atoms == 0:
-            raise ValueError("Structure.distance_matrix() There are no "
-                             "atoms in the structure.")
+        The method also creates the bonds of the structure object
 
-        # Fill the distance matrix with zeros
-        self.dist_mat = np.zeros((num_atoms, num_atoms), dtype=np.float64)
+        Parameters
+        ----------
+        box_size : float (optional)
+            The size of the periodic box. Default is 3.0.
+        distance_tol : float (optional)
+            The tolerance for bond detection. Default is 1.2.
+        """
+        if len(self.atoms) < 200:
+            # Need the number of atoms
+            num_atoms = len(self.atoms)
 
-        # Iterate over all atoms ... twice
-        for i, ai in enumerate(self.atoms):
-            for j, aj in enumerate(self.atoms):
-                # If it's the same atom, the distance is zero
-                if i != j:
-                    # Compute distance
-                    self.dist_mat[i][j] = np.linalg.norm(ai.coords - aj.coords)
+            # Check if there are any atoms
+            if num_atoms == 0:
+                raise ValueError("Structure.distance_matrix() There are no "
+                                "atoms in the structure.")
 
-                    # Check if it's a bond
-                    if self.dist_mat[i][j] < (ai.radius + aj.radius) * 1.1:
-                        # Create bond pair
-                        if i < j:
-                            bond_pair = (i, j)
-                        else:
-                            bond_pair = (j, i)
-                        # Add it to the bond list
-                        if bond_pair not in self.bonds:
-                            self.bonds.append(bond_pair)
+            # Fill the distance matrix with zeros
+            self.dist_mat = np.zeros((num_atoms, num_atoms), dtype=np.float64)
+
+            # Iterate over all atoms ... twice
+            for i, ai in enumerate(self.atoms):
+                for j, aj in enumerate(self.atoms):
+                    # If it's the same atom, the distance is zero
+                    if i != j:
+                        # Compute distance
+                        self.dist_mat[i][j] = np.linalg.norm(
+                                                    ai.coordinates - aj.coordinates
+                                                    )
+
+                        # Check if it's a bond
+                        if self.dist_mat[i][j] < (ai.radius + aj.radius) * distance_tol:
+                            # Create bond pair
+                            if i < j:
+                                bond_pair = (i, j)
+                            else:
+                                bond_pair = (j, i)
+                            # Add it to the bond list
+                            if bond_pair not in self.bonds:
+                                self.bonds.append(bond_pair)
+        else:
+            warnings.warn("Structure.distance_matrix() The number of atoms"
+                          " is too large to compute the distance matrix."
+                          " Only the bond list will be computed.")
+            coords = [a.coordinates for a in self.atoms]
+            radii = [a.radius for a in self.atoms]
+            if len(self.atoms) < 2000:
+                computed_output = get_distance_matrix(coords, radii)
+                # self.dist_mat = computed_output['distance_matrix']
+                self.bonds = computed_output['bonds']
+                del(computed_output)
+            else:
+                self.bonds = get_bond_list(
+                                        coords,
+                                        radii,
+                                        box_size,
+                                        distance_tol)
     
     def get_sub_structure(self, force : bool = False) -> Molecule | Collection:
         """ Method to get the sub-structures of the given structure
@@ -130,7 +179,8 @@ class Structure:
         ----------
         force : bool
             If 'force' is True, then the non-bonded atoms will be ignored
-            when constructing the molecules in the collection.
+            when constructing the molecules in the collection. (Useful if
+            there's non-bonded atoms like ions)
 
         Returns
         -------
@@ -164,7 +214,7 @@ class Structure:
                 temp_mol = Molecule(f"mol_{i}")
                 for ai in sg:
                     temp_mol.add_atoms(self.atoms[ai])
-                temp_mol.get_bonds(True)
+                # temp_mol.get_bonds(True)
                 sub_structure.add_molecule(f"mol_{i}", temp_mol)
         
         return sub_structure

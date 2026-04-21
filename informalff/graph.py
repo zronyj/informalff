@@ -1,4 +1,4 @@
-import warnings                                    # To throw warnings instead of raising errors
+from warnings import warn    # To throw warnings instead of raising errors
 
 # ------------------------------------------------------- #
 #                The Molecular Graph Class                #
@@ -48,13 +48,15 @@ class MolecularGraph:
             pre_bonds += b
         
         pre_bonds = set(pre_bonds)
-        if len(pre_bonds) != atoms:
+        atoms_b = len(pre_bonds)
+        if atoms_b != atoms:
             if force:
                 self.atoms = sorted(list(pre_bonds))
             else:
                 raise ValueError("MolecularGraph.__init__() The number of "
                                 "atoms and the atoms in the bonds do not "
-                                "match!")
+                                "match!"
+                                f"\nAtoms: {atoms} vs Bonds: {atoms_b}")
         else:
             self.atoms = list(range(atoms))
         
@@ -391,8 +393,8 @@ class MolecularGraph:
             A list of the atoms that are bonded together
             as a molecule."""
         if len(self.bonds) == 0:
-            warnings.warn("MolecularGraph._follow_bonds() No bonds were "
-                          "provided! Just the atom will be returned.")
+            warn("MolecularGraph._follow_bonds() No bonds were "
+                 "provided! Just the atom will be returned.")
             return [atom]
 
         # Add the atom to the path if it isn't there yet

@@ -7,7 +7,7 @@ from functools import lru_cache      # To cache functions
 from scipy.special import gamma      # To compute the gamma function
 from scipy.optimize import curve_fit # To fit the Subbotin function
 
-from .atom import PERIODIC_TABLE
+from .atom import Atom, PERIODIC_TABLE
 from .molecule import Molecule, BOHR
 
 def _subbotin(x, alpha, sigma, mu):
@@ -77,8 +77,8 @@ class Collection(object):
         self.__natoms = 0
         self.__ref_atoms = []
     
-    def __repr__(self):
-        """ Method to represent a Collection
+    def __str__(self):
+        """ Method to represent a Collection as a string
 
         This method builds a string with the information
         of the Collection object. Said string will be displayed
@@ -109,7 +109,7 @@ class Collection(object):
                 content += ("Atoms per molecule: "
                             f"{self.molecules[temp].get_num_atoms()}\n")
             content += "\n         Limits\n------------------------------\n"
-            lims = self.get_limits(option="scan")
+            lims = self.get_limits()
             content += "     Lower    Upper  Side\n"
             content += (f"X:{lims['X'][0]:8.3f} {lims['X'][1]:8.3f}"
                         f" {lims['X'][2]:5.2f}\n")
@@ -142,7 +142,7 @@ class Collection(object):
 
         Parameters
         ----------
-        idx : int, slice, or str
+        idx : int or slice
             - If an integer, it retrieves the atom at that index.
             - If a slice, it retrieves a list of atoms defined by the slice.
         
@@ -165,7 +165,7 @@ class Collection(object):
             tmp_atom = self.molecules[ref_code[0]].atoms[ref_code[1]]
             return [
                 tmp_atom.element,
-                tmp_atom.get_coordinates()
+                tmp_atom.coordinates
             ]
         elif isinstance(idx, slice):
             piece = []
@@ -178,7 +178,7 @@ class Collection(object):
                 piece.append(
                     [
                         tmp_atom.element,
-                        tmp_atom.get_coordinates()
+                        tmp_atom.coordinates
                     ]
                 )
             return piece
@@ -193,7 +193,7 @@ class Collection(object):
 
         Parameters
         ----------
-        idx : int, slice, or str
+        idx : int or slice
             - If an integer, it sets the atom at that index.
             - If a slice, it sets a list of atoms defined by the slice.
         data : list
@@ -236,7 +236,7 @@ class Collection(object):
                 )
             ref_code = self.__ref_atoms[idx]
             self.molecules[ref_code[0]].atoms[ref_code[1]].element = data[0]
-            self.molecules[ref_code[0]].atoms[ref_code[1]].coords = data[1]
+            self.molecules[ref_code[0]].atoms[ref_code[1]].coordinates = data[1]
         elif isinstance(idx, slice):
             i = idx.start if idx.start != None else 0
             o = idx.stop if idx.stop != None else len(self.__ref_atoms)
@@ -355,6 +355,22 @@ class Collection(object):
                            "in the collection; no molecule deleted."))
             return False
     
+    def get_atoms(self) -> list:
+        """ Method to get the collection's atoms
+
+        Returns
+        -------
+        todos : list of Atom
+            A list with all the atoms in the collection.
+        """
+        todos = []
+
+        for mol in self.molecules.keys():
+            for a in self.molecules[mol].atoms:
+                todos.append(a)
+
+        return todos
+
     def get_num_atoms(self) -> int:
         """ Method to get the number of atoms in the collection
 
@@ -378,17 +394,24 @@ class Collection(object):
 
         for mol in self.molecules.keys():
             for a in self.molecules[mol].atoms:
-                x, y, z = a.get_coordinates()
+                x, y, z = a.coordinates
                 todos.append([a.element, x, y, z, a.charge])
 
         return todos
 
-    def get_density(self) -> float:
+    def get_density(self, corner : bool = False) -> float:
         """ Calculate the collection's density
 
         The method will compute the total mass and volume of
         the collection and divide them to obtain the density.
         Consider that several units have to be adjusted!
+
+        Parameters
+        ----------
+        corner : bool
+            If True, the method will first compute the bounding
+            box of the collection, shift that box to the origin
+            and then compute the density.
 
         Returns
         -------
@@ -399,16 +422,16 @@ class Collection(object):
         if len(self.molecules.keys()) == 0:
             return 0
 
-        self.corner_box()
+        if corner:
+            self.corner_box()
 
         # Molecules per mol
         avogadro = 6.022E23
 
         # Get the mass of all molecules in g/mol
         mass = 0
-        for mol in self.molecules.keys():
-            self.molecules[mol].get_mol_weight()
-            mass += self.molecules[mol].mol_weight
+        for mol_v in self.molecules.values():
+            mass += mol_v.mol_weight
 
         # Gram per mol to kilogram
         mass /= (1000 * avogadro)
@@ -441,9 +464,8 @@ class Collection(object):
         """
         # Get the mass of all molecules in uma
         mass = 0
-        for mol in self.molecules.keys():
-            self.molecules[mol].get_mol_weight()
-            mass += self.molecules[mol].mol_weight
+        for mol_v in self.molecules.values():
+            mass += mol_v.mol_weight
 
         return mass
                 
@@ -468,7 +490,7 @@ class Collection(object):
             for atom in mol.atoms:
 
                 # Take the coordinates of each atom and add them to the center
-                collection_center += atom.coords
+                collection_center += atom.coordinates
 
         # Scaling it down by the number of atoms
         collection_center /= self.__natoms
@@ -608,10 +630,10 @@ class Collection(object):
                 for q in "XYZ":
 
                     # Compute the number of bins
-                    number_bins[q] = int(lims[q][1] / bin_width)
+                    number_bins[q] = abs(int(lims[q][1] / bin_width))
 
                     # Compute the new width of each bin
-                    new_delta = (lims[q][1] - lims[q][0] + bin_width)
+                    new_delta = (lims[q][2] + bin_width)
                     new_delta /= number_bins[q]
 
                     # Create the bins
@@ -1039,11 +1061,11 @@ class Collection(object):
             # Iterate over atoms
             for a in mol.atoms:
                 # Get the atom's current coordinates
-                coords = a.get_coordinates()
+                coords = a.coordinates
                 # Compute the new coordinates
                 new_coords = coords - mins
                 # Move the atom ...
-                a.set_coordinates(new_coords[0],new_coords[1],new_coords[2])
+                a.coordinates = (new_coords[0],new_coords[1],new_coords[2])
     
     def center_box(self) -> None:
         """ Re-position the collection putting the center at the origin
@@ -1279,7 +1301,7 @@ class Collection(object):
             # Iterate over atoms
             for a in mol.atoms:
                 # Get the atom's current coordinates
-                coords = a.get_coordinates()
+                coords = a.coordinates
 
                 # Increment the number of atoms
                 atom_counter += 1

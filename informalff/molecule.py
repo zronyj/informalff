@@ -1,7 +1,7 @@
 import warnings                                    # To throw warnings instead of raising errors
 import numpy as np                                 # To do basic scientific computing
 from functools import lru_cache                    # To cache functions
-from multiprocessing import Pool, Process, Manager # To parallelize jobs
+from multiprocessing import Pool, cpu_count        # To parallelize jobs
 import scipy.constants as cts                      # Universal constants
 from scipy.spatial.transform import Rotation as R  # To be able to construct rotation matrices
 
@@ -40,8 +40,6 @@ class Molecule(object):
         A `list` with all the quartets of atoms creating dihedrals
     torsions : list of list
         A `list` with all the rotable bonds in the molecule
-    mol_weight : float
-        The molecular weight
     charge : float
         The molecular charge
     """
@@ -63,13 +61,12 @@ class Molecule(object):
         self.angles = []
         self.dihedrals = []
         self.torsions = []
-        self.mol_weight = 0.0
         self.charge = 0.0
         self.volume = 0.0
         self.graph = None
 
-    def __repr__(self) -> str:
-        """ Method to represent a molecule
+    def __str__(self) -> str:
+        """ Method to represent a molecule as a string
 
         This method builds a string with the information
         of the Molecule object. Said string will be displayed
@@ -130,9 +127,6 @@ class Molecule(object):
         for a in atoms:
             # Add atoms to the molecule
             self.atoms.append(a)
-
-        # Compute the molecular weight of the molecule
-        self.get_mol_weight()
     
     def remove_atoms(self, *atoms : int) -> None:
         """ Method to remove atoms from the molecule
@@ -202,7 +196,7 @@ class Molecule(object):
         if isinstance(idx, int):
             return [
                 self.atoms[idx].element,
-                self.atoms[idx].get_coordinates()
+                self.atoms[idx].coordinates
             ]
         elif isinstance(idx, slice):
             piece = []
@@ -213,7 +207,7 @@ class Molecule(object):
                 piece.append(
                     [
                         self.atoms[j].element,
-                        self.atoms[j].get_coordinates()
+                        self.atoms[j].coordinates
                     ]
                 )
             return piece
@@ -308,6 +302,16 @@ class Molecule(object):
                     "integer or a slice object."
             )
     
+    def __len__(self) -> int:
+        """ Method to get the number of atoms in the molecule
+
+        Returns
+        -------
+        int
+            The number of atoms in the molecule
+        """
+        return len(self.atoms)
+    
     def toggle_selection(self) -> None:
         """ Method to activate/deactivate atoms in the molecule
 
@@ -368,7 +372,9 @@ class Molecule(object):
         for c, a in enumerate(self.atoms):
             a.charge = charges[c]
 
-    def get_mol_weight(self) -> bool:
+    @property
+    @lru_cache(maxsize=1)
+    def mol_weight(self) -> bool:
         """ Method to get the Molecule's mass
 
         Will compute the molecule's mass using the periodic table
@@ -376,14 +382,14 @@ class Molecule(object):
 
         Returns
         -------
-        bool
-            True if the molecular mass has been computed.
+        float
+            The mass of the molecule
         """
-        self.mol_weight = 0.0
+        self._mol_weight = 0.0
         for a in self.atoms:
-            self.mol_weight += a.mass
+            self._mol_weight += a.mass
 
-        return True
+        return self._mol_weight
 
     def get_coords(self) -> list:
         """ Method to get the molecule's coordinates
@@ -397,7 +403,7 @@ class Molecule(object):
         todos = []
 
         for a in self.atoms:
-            x, y, z = a.get_coordinates()
+            x, y, z = a.coordinates
             todos.append([a.element, x, y, z, a.charge])
 
         return todos
@@ -412,47 +418,39 @@ class Molecule(object):
         """
         return len(self.atoms)
     
-    def _montecarlo_volume(self,
-                            pid : int,
-                            return_dict : dict,
-                            dots : int = 1000) -> None:
+    def _mc_volume(self, dots : int = 1000, seed : int = 42) -> float:
         """ Method to evaluate the molecular volume via Monte Carlo
 
         Parameters
         ----------
-        pid : int
-            Process ID
-        return_dict : dict
-            Dictionary to store the results
         dots : int
             Number of dots to generate
+        
+        Returns
+        -------
+        float
+            The volume of the molecule
         """
         # Get the limits of the molecule
         lims = self.get_limits()
         box_volume = lims['X'][2] * lims['Y'][2] * lims['Z'][2]
 
-        # Random number generator
-        rng = np.random.default_rng()
+        # Random number generator seed
+        np.random.seed(seed)
         
         # Generate random coordinates
-        x = rng.random(dots)
-        y = rng.random(dots)
-        z = rng.random(dots)
+        attempts = np.random.random((dots, 3))
+        attempts *= np.array([lims['X'][2], lims['Y'][2], lims['Z'][2]])
+        attempts += np.array([lims['X'][0], lims['Y'][0], lims['Z'][0]])
 
         hits = 0
         for j in range(dots):
-
-            # Build the dot
-            dot = np.array([x[j] * lims['X'][2],
-                            y[j] * lims['Y'][2],
-                            z[j] * lims['Z'][2]])
-            dot += np.array([lims['X'][0], lims['Y'][0], lims['Z'][0]])
             
             # Iterate over all atoms
             for a in self.atoms:
 
                 # Compute distance between the dot and the atom
-                distance = np.linalg.norm(dot - a.get_coordinates())
+                distance = np.linalg.norm(attempts[j] - a.coordinates)
 
                 # If the distance is less than the radius of the atom
                 if distance < a.radius:
@@ -463,12 +461,14 @@ class Molecule(object):
         # ratio of (dots - hits) to the number of dots
         ratio = hits / dots
 
-        return_dict[pid] = box_volume * ratio
+        return ratio * box_volume
     
     @lru_cache(maxsize=1)
     def get_molecular_volume(self,
                              dots : int = 1000,
-                             iterations : int = 10) -> float:
+                             iterations : int = 10,
+                             seed : int = 42,
+                             n_cores : int = cpu_count()) -> float:
         """ Method to get the volume of the molecule
 
         The method will compute the volume of the molecule using
@@ -486,32 +486,36 @@ class Molecule(object):
         self.volume : float
             Volume of the molecule
         """
-        # If < 3 iterations are used, the volume is computed in serial
-        if iterations > 2:
-            # Split the task accross the number of cores
+        # Set the volume to zero
+        self.volume = 0
 
-            # Prepare a list of processes
-            processes = []
-            # Set a process manager to get the results
-            manager = Manager()
-            # Initialize a dictionary for the results
-            return_dict = manager.dict()
-            # Add each process to the list
-            for i in range(iterations):
-                processes.append(Process(target=self._montecarlo_volume,
-                                        args=(i, return_dict, dots)))
-            # Start the processes
-            [t.start() for t in processes]
-            # Join the processes
-            [t.join() for t in processes]
-            # Get the results
-            mol_vols = list(return_dict.values())
-        else:
-            # Initialize a list for the results
-            mol_vols = []
-            # Compute the volume in serial
-            for i in range(iterations):
-                mol_vols.append(self._montecarlo_volume(dots))
+        # Sanity checks
+        if n_cores > cpu_count():
+            n_cores = cpu_count()
+        
+        if n_cores < 1:
+            n_cores = 1
+        
+        # Do not overload the system
+        if iterations < 3:
+            n_cores = 1
+        
+        # Create a worker function to be freely used in the pool
+        global worker
+        def worker(mc_info : tuple) -> float:
+            return self._mc_volume(*mc_info)
+        
+        # Split the task accross the number of cores
+        with Pool(n_cores) as pool:
+            mol_vols = pool.map(
+                            worker,
+                            [(dots, seed) for i in range(iterations)]
+                            )
+        
+        # Convert the generator to a list
+        mol_vols = list(mol_vols)
+
+        # Set the volume
         self.volume = np.round(np.mean(mol_vols), 3)
 
         return self.volume
@@ -590,7 +594,7 @@ class Molecule(object):
             self.get_bonds()
 
         num_neighbors = len(self.atoms[i].bonded_atoms)
-        center_coords = self.atoms[i].get_coordinates()
+        center_coords = self.atoms[i].coordinates
 
         if num_neighbors < 3:
             return False
@@ -602,7 +606,7 @@ class Molecule(object):
             # Vectors from the center to the neighbors
             vector_ngbr = []
             for neighbor in self.atoms[i].bonded_atoms:
-                neighbor_coords = self.atoms[neighbor].get_coordinates()
+                neighbor_coords = self.atoms[neighbor].coordinates
                 vector_ngbr.append(neighbor_coords - center_coords)
             
             # Normals constructed from the center
@@ -645,7 +649,7 @@ class Molecule(object):
             # Vectors from the center to the neighbors
             vector_ngbr = []
             for neighbor in self.atoms[i].bonded_atoms:
-                neighbor_coords = self.atoms[neighbor].get_coordinates()
+                neighbor_coords = self.atoms[neighbor].coordinates
                 vector_ngbr.append(neighbor_coords - center_coords)
             
             # Normals constructed from the center
@@ -705,10 +709,15 @@ class Molecule(object):
 
         return False
 
-    def get_distance_matrix(self) -> np.ndarray:
+    def get_distance_matrix(self, tolerance : float = 1.2) -> np.ndarray:
         """ Method to get the distances between pairs of atoms
 
         The method also creates the bonds of the molecule object
+
+        Parameters
+        ----------
+        tolerance : float
+            Tolerance for the distance
 
         Returns
         -------
@@ -731,12 +740,8 @@ class Molecule(object):
                 if i != j:
                     # Compute distance
                     dist_mat[i][j] = self.get_distance(i, j)
-                    # Atomic radius 1
-                    d1 = ai.radius
-                    # Atomic radius 2
-                    d2 = aj.radius
                     # Maximal bond distance
-                    max_dist = d1 + d2
+                    max_dist = (ai.radius + aj.radius) * tolerance
                     # If the position of both atoms is within bonding distance
                     if dist_mat[i][j] <= max_dist:
                         # Add them to a temporary list
@@ -929,15 +934,15 @@ class Molecule(object):
         # Iterate over all atoms in the molecule ...
         for a in self.atoms:
             # Extract the atomic coordinates
-            position = a.get_coordinates()
+            position = a.coordinates
             # Compute the new coordinates
             new_coords = position + direction
             # Set the new coordinates
-            a.set_coordinates(
-                x=new_coords[0],
-                y=new_coords[1],
-                z=new_coords[2]
-            )
+            a.coordinates = {
+                "x" : new_coords[0],
+                "y" : new_coords[1],
+                "z" : new_coords[2]
+            }
     
     def move_selected_atoms(self, direction : np.ndarray) -> None:
         """ Method to move some atoms of the molecule
@@ -954,13 +959,15 @@ class Molecule(object):
         for a in self.atoms:
             if a.flag:
                 # Extract the atomic coordinates
-                position = a.get_coordinates()
+                position = a.coordinates
                 # Compute the new coordinates
                 new_coords = position + direction
                 # Set the new coordinates
-                a.set_coordinates(  x=new_coords[0],
-                                    y=new_coords[1],
-                                    z=new_coords[2])
+                a.coordinates = {
+                    "x" : new_coords[0],
+                    "y" : new_coords[1],
+                    "z" : new_coords[2]
+                }
 
     def rotate_molecule_over_center(self,
                                     euler_angles : np.ndarray,
@@ -997,13 +1004,15 @@ class Molecule(object):
         # Iterate over all atoms in the molecule ...
         for a in self.atoms:
             # Extract the atomic coordinates
-            position = a.get_coordinates()
+            position = a.coordinates
             # Compute the new coordinates
             new_coords = r.as_matrix() @ position
             # Set the new coordinates
-            a.set_coordinates(  x=new_coords[0],
-                                y=new_coords[1],
-                                z=new_coords[2])
+            a.coordinates = { 
+                "x" : new_coords[0],
+                "y" : new_coords[1],
+                "z" : new_coords[2]
+            }
         
         self.move_molecule(mol_center)
     
@@ -1047,13 +1056,15 @@ class Molecule(object):
         # Iterate over all atoms in the molecule ...
         for a in self.atoms:
             # Extract the atomic coordinates
-            position = a.get_coordinates()
+            position = a.coordinates
             # Compute the new coordinates
             new_coords = r.as_matrix() @ position
             # Set the new coordinates
-            a.set_coordinates(  x=new_coords[0],
-                                y=new_coords[1],
-                                z=new_coords[2])
+            a.coordinates = {
+                "x" : new_coords[0],
+                "y" : new_coords[1],
+                "z" : new_coords[2]
+            }
         
         self.move_molecule(mol_center)
 
@@ -1077,7 +1088,7 @@ class Molecule(object):
         atom : int
             The number of atom to be used as rotation point.
         """
-        rotation_point = self.atoms[atom].get_coordinates()
+        rotation_point = self.atoms[atom].coordinates
 
         self.move_molecule(-1 * rotation_point)
 
@@ -1087,13 +1098,15 @@ class Molecule(object):
         # Iterate over all atoms in the molecule ...
         for a in self.atoms:
             # Extract the atomic coordinates
-            position = a.get_coordinates()
+            position = a.coordinates
             # Compute the new coordinates
             new_coords = r.as_matrix() @ position
             # Set the new coordinates
-            a.set_coordinates(  x=new_coords[0],
-                                y=new_coords[1],
-                                z=new_coords[2])
+            a.coordinates = {
+                "x" : new_coords[0],
+                "y" : new_coords[1],
+                "z" : new_coords[2]
+            }
         
         self.move_molecule(rotation_point)
     
@@ -1132,7 +1145,7 @@ class Molecule(object):
                                  " The selected atom should not be one of"
                                  " the rotated atoms!")
 
-        rotation_point = self.atoms[atom].get_coordinates()
+        rotation_point = self.atoms[atom].coordinates
 
         self.move_molecule(-1 * rotation_point)
 
@@ -1143,13 +1156,15 @@ class Molecule(object):
         for a in self.atoms:
             if a.flag:
                 # Extract the atomic coordinates
-                position = a.get_coordinates()
+                position = a.coordinates
                 # Compute the new coordinates
                 new_coords = r.as_matrix() @ position
                 # Set the new coordinates
-                a.set_coordinates(  x=new_coords[0],
-                                    y=new_coords[1],
-                                    z=new_coords[2])
+                a.coordinates = {
+                    "x" : new_coords[0],
+                    "y" : new_coords[1],
+                    "z" : new_coords[2]
+                }
         
         self.move_molecule(rotation_point)
     
@@ -1180,13 +1195,15 @@ class Molecule(object):
         # Iterate over all atoms in the molecule ...
         for a in self.atoms:
             # Extract the atomic coordinates
-            position = a.get_coordinates()
+            position = a.coordinates
             # Compute the new coordinates
             new_coords = r.as_matrix() @ position
             # Set the new coordinates
-            a.set_coordinates(  x=new_coords[0],
-                                y=new_coords[1],
-                                z=new_coords[2])
+            a.coordinates = {
+                "x" : new_coords[0],
+                "y" : new_coords[1],
+                "z" : new_coords[2]
+            }
         
         self.move_molecule(rotation_point)
     
@@ -1232,13 +1249,15 @@ class Molecule(object):
         for a in self.atoms:
             if a.flag:
                 # Extract the atomic coordinates
-                position = a.get_coordinates()
+                position = a.coordinates
                 # Compute the new coordinates
                 new_coords = r.as_matrix() @ position
                 # Set the new coordinates
-                a.set_coordinates(  x=new_coords[0],
-                                    y=new_coords[1],
-                                    z=new_coords[2])
+                a.coordinates = {
+                    "x" : new_coords[0],
+                    "y" : new_coords[1],
+                    "z" : new_coords[2]
+                }
         
         self.move_molecule(rotation_point)
     
@@ -1279,13 +1298,15 @@ class Molecule(object):
         # Iterate over all atoms in the molecule ...
         for a in self.atoms:
             # Extract the atomic coordinates
-            position = a.get_coordinates()
+            position = a.coordinates
             # Compute the new coordinates
             new_coords = r.as_matrix() @ position
             # Set the new coordinates
-            a.set_coordinates(  x=new_coords[0],
-                                y=new_coords[1],
-                                z=new_coords[2])
+            a.coordinates = {
+                "x" : new_coords[0],
+                "y" : new_coords[1],
+                "z" : new_coords[2]
+            }
         
         
         # Move the molecule back to its place
@@ -1342,13 +1363,15 @@ class Molecule(object):
         for a in self.atoms:
             if a.flag:
                 # Extract the atomic coordinates
-                position = a.get_coordinates()
+                position = a.coordinates
                 # Compute the new coordinates
                 new_coords = r.as_matrix() @ position
                 # Set the new coordinates
-                a.set_coordinates(  x=new_coords[0],
-                                    y=new_coords[1],
-                                    z=new_coords[2])
+                a.coordinates = {
+                    "x" : new_coords[0],
+                    "y" : new_coords[1],
+                    "z" : new_coords[2]
+                }
         
         # Move the molecule back to its place
         self.move_molecule(base)
@@ -1371,9 +1394,9 @@ class Molecule(object):
             The value of the distance between both atoms
         """
         # Get coordinates of atom 1
-        v1 = self.atoms[a1].get_coordinates()
+        v1 = self.atoms[a1].coordinates
         # Get coordinates of atom 2
-        v2 = self.atoms[a2].get_coordinates()
+        v2 = self.atoms[a2].coordinates
 
         return np.linalg.norm(v2 - v1)
 
@@ -1397,9 +1420,9 @@ class Molecule(object):
             The value of the angle between all 3 atoms
         """
         # Get coordinates
-        v1 = self.atoms[a1].get_coordinates()
-        v2 = self.atoms[a2].get_coordinates()
-        v3 = self.atoms[a3].get_coordinates()
+        v1 = self.atoms[a1].coordinates
+        v2 = self.atoms[a2].coordinates
+        v3 = self.atoms[a3].coordinates
 
         # Obtaining the direction vectors
         d1 = v1 - v2
@@ -1445,10 +1468,10 @@ class Molecule(object):
             The value of the angle between all 4 atoms
         """
         # Get coordinates
-        v1 = self.atoms[a1].get_coordinates()
-        v2 = self.atoms[a2].get_coordinates()
-        v3 = self.atoms[a3].get_coordinates()
-        v4 = self.atoms[a4].get_coordinates()
+        v1 = self.atoms[a1].coordinates
+        v2 = self.atoms[a2].coordinates
+        v3 = self.atoms[a3].coordinates
+        v4 = self.atoms[a4].coordinates
 
         # Obtaining the direction vectors
         d1 = v1 - v2
@@ -1527,7 +1550,7 @@ class Molecule(object):
 
         # Iterate over all atoms
         for i, atom in enumerate(self.atoms):
-            dist = atom.coords - COM            # Compute distance for atom
+            dist = atom.coordinates - COM            # Compute distance for atom
             distances.append([i, atom.element, np.linalg.norm(dist)])
 
         # Sort all distances
@@ -1554,7 +1577,7 @@ class Molecule(object):
         for atom in self.atoms:
 
             # Take the coordinates of each atom and add them to the center
-            centro += atom.coords
+            centro += atom.coordinates
 
         # Scaling it down by the number of atoms
         centro *= (1.0/len(self.atoms))

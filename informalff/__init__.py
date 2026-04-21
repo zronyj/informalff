@@ -4,7 +4,10 @@
 from .atom import *
 from .molecule import *
 from .collection import *
+#from .crystal import *
 from .drivers import *
+from .changer import *
+from .chemical_bond import *
 
 from ._version import __version__
 

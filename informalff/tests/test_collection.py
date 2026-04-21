@@ -72,10 +72,10 @@ def test_collection_get_center():
     h2 = informalff.Atom(element="H")
     h3 = informalff.Atom(element="H")
     h4 = informalff.Atom(element="H")
-    h1.set_coordinates(0.0, 0.0, 0.0)
-    h2.set_coordinates(1.0, 0.0, 0.0)
-    h3.set_coordinates(0.0, 2.0, 0.0)
-    h4.set_coordinates(1.0, 2.0, 0.0)
+    h1.coordinates = (0.0, 0.0, 0.0)
+    h2.coordinates = (1.0, 0.0, 0.0)
+    h3.coordinates = (0.0, 2.0, 0.0)
+    h4.coordinates = (1.0, 2.0, 0.0)
 
     mol1 = informalff.Molecule("H2_a")
     mol1.add_atoms(h1, h2)
@@ -105,7 +105,7 @@ def test_collection_get_set_atoms(methane_molecule):
     coll.add_molecule("CH4_1", mol1)
     coll.add_molecule("CH4_2", mol2)
 
-    coords2 = [[a.element, a.get_coordinates() + move] for a in atoms2]
+    coords2 = [[a.element, a.coordinates + move] for a in atoms2]
 
     for i, atm in enumerate(coll[5:]):
         assert np.allclose(atm[1], coords2[i][1])
@@ -120,8 +120,8 @@ def test_collection_detect_collisions(methane_molecule):
 
     h1 = informalff.Atom(element="H")
     h2 = informalff.Atom(element="H")
-    h1.set_coordinates(0.5, 0.5, 1.0)
-    h2.set_coordinates(0.5, 1.5, 1.0)
+    h1.coordinates = (0.5, 0.5, 1.0)
+    h2.coordinates = (0.5, 1.5, 1.0)
 
     mol2 = informalff.Molecule("H2")
     mol2.add_atoms(h1, h2)

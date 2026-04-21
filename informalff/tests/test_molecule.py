@@ -47,10 +47,10 @@ def test_molecule_create():
     h2 = informalff.Atom(element="H")
     h3 = informalff.Atom(element="H")
     h4 = informalff.Atom(element="H")
-    h1.set_coordinates(0.0, 0.0, 0.0)
-    h2.set_coordinates(1.0, 0.0, 0.0)
-    h3.set_coordinates(0.5, 0.5, 0.5)
-    h4.set_coordinates(1.5, 0.5, 0.5)
+    h1.coordinates = (0.0, 0.0, 0.0)
+    h2.coordinates = (1.0, 0.0, 0.0)
+    h3.coordinates = (0.5, 0.5, 0.5)
+    h4.coordinates = (1.5, 0.5, 0.5)
 
     mol1 = informalff.Molecule("H2_a")
     mol1.add_atoms(h1, h2)
@@ -77,8 +77,8 @@ def test_molecule_get_distance_matrix():
 
     h1 = informalff.Atom(element="H")
     h2 = informalff.Atom(element="H")
-    h1.set_coordinates(0.0, 0.0, 0.0)
-    h2.set_coordinates(1.0, 0.0, 0.0)
+    h1.coordinates = (0.0, 0.0, 0.0)
+    h2.coordinates = (1.0, 0.0, 0.0)
 
     mol1 = informalff.Molecule("H2")
     mol1.add_atoms(h1, h2)
@@ -115,8 +115,8 @@ def test_molecule_geometric_center():
 
     h1 = informalff.Atom(element="H")
     h2 = informalff.Atom(element="H")
-    h1.set_coordinates(0.0, 0.0, 0.0)
-    h2.set_coordinates(1.0, 0.0, 0.0)
+    h1.coordinates = (0.0, 0.0, 0.0)
+    h2.coordinates = (1.0, 0.0, 0.0)
 
     mol1 = informalff.Molecule("H2")
     mol1.add_atoms(h1, h2)
@@ -383,8 +383,8 @@ def test_molecule_get_limits():
 
     h1 = informalff.Atom(element="H")
     h2 = informalff.Atom(element="H")
-    h1.set_coordinates(0.0, 0.0, 0.0)
-    h2.set_coordinates(1.0, 0.0, 0.0)
+    h1.coordinates = (0.0, 0.0, 0.0)
+    h2.coordinates = (1.0, 0.0, 0.0)
 
     mol1 = informalff.Molecule("H2")
     mol1.add_atoms(h1, h2)
