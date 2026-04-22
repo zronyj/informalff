@@ -48,6 +48,7 @@ class QM_driver(ABC):
         self.props = qm_props
         self.sub_structure = sub_structure
         self.calc_name = calc_name
+        self.verbose = verbose
     
     def __save_frequencies(self,
                          eigenvalues : np.ndarray,
@@ -1111,7 +1112,7 @@ class QM_driver(ABC):
                 self,
                 delta : float = 5e-3 * BOHR2ANG,
                 points : int = 1,
-                n_cores : int = mp.cpu_count()) -> np.ndarray:
+                n_cores : int = mp.cpu_count()) -> dict:
         """ Method to compute the numerical gradient of the
         given structure, using the QM engine.
 
@@ -1545,7 +1546,8 @@ class ORCA_driver(QM_driver):
                  path : str,
                  qm_props : dict,
                  sub_structure : Molecule | Collection,
-                 calc_name : str = 'ORCA_calculation'):
+                 calc_name : str = 'ORCA_calculation',
+                 verbose : bool = False):
         """ ORCA_driver constructor method
         
         Parameters
@@ -1558,11 +1560,15 @@ class ORCA_driver(QM_driver):
             A Molecule or Collection object to create the inputs for Orca
         calc_name : str
             The name to be given to the calculation directory
+        verbose : bool
+            If True, the execution of the calculations will be printed
+            to the console
         """
         self.orca_path = path
         self.props = qm_props
         self.sub_structure = sub_structure
         self.calc_name = calc_name
+        self.verbose = verbose
     
     def create_input(self,
                      x_name : str = "",
@@ -1784,7 +1790,8 @@ class PSI4_driver(QM_driver):
     def __init__(self,
                  qm_props : dict,
                  sub_structure : Molecule | Collection,
-                 calc_name : str = 'PSI4_calculation'):
+                 calc_name : str = 'PSI4_calculation',
+                 verbose : bool = False):
         """ PSI4_driver constructor method
         
         Parameters
@@ -1795,6 +1802,8 @@ class PSI4_driver(QM_driver):
             A Molecule or Collection object to create the inputs for Psi4
         calc_name : str
             The name to be given to the calculation directory
+        verbose : bool
+            If True, print messages about the progress of the calculations
         """
         try:
             import psi4
@@ -1804,6 +1813,7 @@ class PSI4_driver(QM_driver):
         self.props = qm_props
         self.sub_structure = sub_structure
         self.calc_name = calc_name
+        self.verbose = verbose
 
         self.psi4_geom = ''
         self.final_energy = 0.0
