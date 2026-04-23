@@ -943,7 +943,6 @@ class QM_driver(ABC):
                 return (kvp[0], results['Energy[SCF]'])
             
             # Run the calculations in parallel
-            
             pool = mp.Pool(n_cores)
             results = list(
                         tqdm(
@@ -1019,6 +1018,43 @@ class QM_driver(ABC):
             'hessian' : hess,
             'work_dir' : work
         }
+
+    @abstractmethod
+    def cp_prepare_monomer(self,
+                           molecule : str,
+                           x_name : str = "",
+                           ref_path : str = "",
+                           ghost : bool = False) -> str:
+        """ Abstract method to create the input files for the monomer
+        calculation
+        
+        This method is supposed to create the input file(s) required
+        for the QM calculation of a monomer with ghost atoms. The whole
+        idea is to compute the counterpoise correction for the dimer.
+
+        Parameters
+        ----------
+        molecule : str
+            The molecule for which the input files should be created.
+            It should be a molecule inside the Collection provided in
+            the constructor of the QM_driver class.
+        x_name : str
+            Additional name to add to this particular run
+        ref_path : str
+            Path to a reference directory where some files could be
+            copied from
+        ghost : bool
+            If True, the monomer will have ghost atoms for the other
+            molecule in the dimer. If False, the monomer will
+            not have ghost atoms.
+        
+        Returns
+        -------
+        work : str
+            The path to the directory where the input files have been
+            placed, and where the QM calculation should be executed
+        """
+        pass
 
     @abstractmethod
     def create_input(self,
@@ -1107,6 +1143,150 @@ class QM_driver(ABC):
         result = self.parse_output(path)
 
         return result
+    
+    def counterpoise(self,
+                     n_cores : int = mp.cpu_count(),
+                     raw_interaction : bool = True) -> dict:
+        """ Method to compute the Boys-Bernardi counterpoise correction
+        for a dimer made of two Molecule objects.
+
+        Parameters
+        ----------
+        n_cores : int
+            The number of cores to be used for the parallel execution
+            of the calculations. If n_cores is 1, the calculations
+            will be run in serial.
+        raw_interaction : bool
+            If True, the isolated monomer energies will also be computed
+            to obtain the raw interaction energy and the BSSE explicitly
+
+        Returns
+        -------
+        result : dict
+            A dictionary with the energies involved in the counterpoise
+            correction, together with the CP-corrected interaction energy
+        """
+        if not isinstance(self.sub_structure, Collection):
+            raise TypeError(
+                    "QM_driver.counterpoise() The sub_structure must be "
+                    "a Collection object.")
+        
+        if len(self.sub_structure.molecules) != 2:
+            raise ValueError(
+                    "QM_driver.counterpoise() The sub_structure must contain "
+                    "exactly two molecules.")
+        
+        name_a, name_b = self.sub_structure.molecules.keys()
+        mol_a, mol_b = self.sub_structure.molecules.values()
+
+        if not isinstance(mol_a, Molecule):
+            raise TypeError(
+                    "QM_driver.counterpoise() mol_a must be a Molecule object.")
+        if not isinstance(mol_b, Molecule):
+            raise TypeError(
+                    "QM_driver.counterpoise() mol_b must be a Molecule object.")
+
+        # Save the current sub_structure to restore it afterwards
+        original = deepcopy(self.sub_structure)
+
+        here = os.getcwd()
+        #tmp_dir = tempfile.gettempdir()
+
+        # Create a temporary working directory
+        work = os.path.join(here, f'QM_Counterpoise_{int(time.time())}')
+        if os.path.exists(work):
+            shutil.rmtree(work)
+        os.mkdir(work)
+        os.chdir(work)
+
+        paths = {}
+
+        # Prepare all the paths for the calculations
+
+        # Full dimer in the full dimer basis
+        paths['_AB_AB'] = self.create_input('_AB_AB')
+        # Monomer A in the dimer basis (B as ghosts)
+        paths['_A_AB'] = self.cp_prepare_monomer(name_a,
+                                                 '_A_AB',
+                                                 ghost=True)
+        # Monomer B in the dimer basis (A as ghosts)
+        paths['_B_AB'] = self.cp_prepare_monomer(name_b,
+                                                 '_B_AB',
+                                                 ghost=True)
+
+        if raw_interaction:
+            # Monomer A in its own basis
+            paths['_A_A'] = self.cp_prepare_monomer(name_a,
+                                                    '_A_A',
+                                                    ghost=False)
+            # Monomer B in its own basis
+            paths['_B_B'] = self.cp_prepare_monomer(name_b,
+                                                    '_B_B',
+                                                    ghost=False)
+        
+        if self.verbose:
+            print(("\Doing all the calculations for a Counterpoise Correction "
+                  f"using {n_cores} cores"), end=" ... ", flush=True)
+
+        # Run the calculations and parse the results (in parallel if possible)
+        if n_cores == 1:
+            pre_results = []
+            for k, v in tqdm(paths.items(), disable = not self.verbose):
+                self.run_calculation(v)
+                res = self.parse_output(v)
+                pre_results.append((k, res['Energy[SCF]']))
+        else:
+            # Define the worker function for parallel execution
+            global worker
+            def worker(kvp : tuple) -> tuple:
+                self.run_calculation(kvp[1])
+                results = self.parse_output(kvp[1])
+                return (kvp[0], results['Energy[SCF]'])
+            
+            # Run the calculations in parallel
+            pool = mp.Pool(n_cores)
+            pre_results = list(
+                        tqdm(
+                            pool.imap_unordered(
+                                worker,
+                                [(k, v) for k, v in paths.items()]
+                            ),
+                            total = len(paths),
+                            disable = not self.verbose
+                        )
+                    )
+            pool.close()
+            pool.join()
+
+        if self.verbose:
+            print("... done.\n", flush=True)
+
+        # Prepare the results dictionary
+        results = {'work_dir' : work}
+
+        for pr in pre_results:
+
+            key = "E[" + "|".join(pr[0][1:].split("_")) + "]"
+            results[key] = pr[1]
+        
+        results['CP-Corrected Interaction Energy'] = results['E[AB|AB]'] - \
+                                                     results['E[A|AB]'] - \
+                                                     results['E[B|AB]']
+        if raw_interaction:
+            results['Interaction Energy'] = results['E[AB|AB]'] - \
+                                            results['E[A|A]'] - \
+                                            results['E[B|B]']
+            
+            results['BSSE'] = results['E[A|AB]'] - results['E[A|A]'] + \
+                              results['E[B|AB]'] - results['E[B|B]']
+
+        # Restore the original sub_structure
+        self.sub_structure = deepcopy(original)
+
+        # Return to the original directory
+        os.chdir(here)
+
+        return results
     
     def num_gradient(
                 self,
@@ -1520,6 +1700,11 @@ class QM_driver(ABC):
 
         return processed
 
+# =============================================================================
+# =============================================================================
+#                             Specific QM drivers
+# =============================================================================
+# =============================================================================
 
 class ORCA_driver(QM_driver):
     """ Class to run QM calculations in ORCA
@@ -1604,7 +1789,8 @@ class ORCA_driver(QM_driver):
         # Get the current working directory, and creating the directory
         # for the Orca calculation
         here = os.getcwd()
-        work = os.path.join(here, f'{self.calc_name}{x_name}_{int(time.time() * 1000)}')
+        work = os.path.join(here, (f'{self.calc_name}{x_name}_'
+                                   f'{int(time.time() * 1000)}'))
         if os.path.exists(work):
             shutil.rmtree(work)
         os.mkdir(work)
@@ -1639,6 +1825,111 @@ class ORCA_driver(QM_driver):
 
         # Return to the base directory
         os.chdir(here)
+        return work
+    
+    def cp_prepare_monomer(self,
+                           molecule : str,
+                           x_name : str = "",
+                           ref_path : str = "",
+                           ghost : bool = False) -> str:
+        """ Method to create the input files for a monomer calculation
+
+        Parameters
+        ----------
+        molecule : str
+            The molecule for which the input files should be created.
+            It should be a molecule inside the Collection provided in
+            the constructor of the QM_driver class.
+        x_name : str
+            Additional name to add to this particular run
+        ref_path : str
+            Path to a reference directory where some files could be
+            copied from
+        ghost : bool
+            If True, the monomer will have ghost atoms for the other
+            molecule in the dimer. If False, the monomer will
+            not have ghost atoms.
+        
+        Returns
+        -------
+        work : str
+            The path to the directory where the input files have been
+            placed, and where the QM calculation should be executed
+        """
+        # Get the current working directory, and creating the directory
+        # for the Orca calculation
+        here = os.getcwd()
+        work = os.path.join(here, (f'CP_{self.calc_name}{x_name}_'
+                                   f'{int(time.time() * 1000)}'))
+        if os.path.exists(work):
+            shutil.rmtree(work)
+        os.mkdir(work)
+        os.chdir(work)
+
+        # Renaming the molecule as "geometry"
+        old_name = self.sub_structure.name
+        self.sub_structure.name = "geometry"
+
+        # Writing the XYZ file
+        if ghost:
+            self.sub_structure.save_as_xyz()
+        else:
+            t_mol = deepcopy(self.sub_structure.molecules[molecule])
+            t_mol.name = "geometry"
+            t_mol.save_as_xyz()
+
+        # First line(s) of the Orca input file
+        header = (f'! {self.props["method"]} {self.props["basis"]} DEFGRID3'
+                  f' TightSCF {self.props["modifiers"]}\n')
+
+        # Copy any reference files if provided
+        if ref_path != "":
+            if os.path.exists(os.path.join(ref_path, 'input.gbw')):
+                shutil.copy(os.path.join(ref_path, 'input.gbw'), 'reference.gbw')
+                xtra_input = "%scf\n" + \
+                             '    Guess  MORead\n' + \
+                             '    MOInp "reference.gbw"\n' + \
+                             'end\n'
+            else:
+                raise FileNotFoundError("ORCA_driver.cp_prepare_monomer() "
+                                        "The provided reference path "
+                                        "does not contain an input.gbw file!")
+        
+        # Starting with the line specifying the XYZ coordinates, ...
+        # ... the charge and multiplicity
+        geom = f'* xyz {self.props["charge"]} {self.props["multipl"]}\n'
+
+        for a in self.sub_structure.molecules[molecule].get_coords():
+            geom += f' {a[0]:>2} '
+            geom += f'{a[1]:>18.10f} {a[1]:>18.10f} {a[2]:>18.10f}\n'
+
+        if ghost:
+            mol_names = list(self.sub_structure.molecules.keys())
+            mol_names.remove(molecule)
+            phantom = mol_names[0]
+            for a in self.sub_structure.molecules[phantom].get_coords():
+                geom += f' {a[0]:>2}: '
+                geom += f'{a[1]:>18.10f} {a[1]:>18.10f} {a[2]:>18.10f}\n'
+        
+        geom += '*\n'
+
+        # Saving the input file
+        with open('input.inp', 'w') as f:
+            if ref_path != "":
+                f.write(
+                    header +
+                    xtra_input +
+                    geom
+                )
+            else:
+                f.write(header + geom)
+
+        # Return to the base directory
+        os.chdir(here)
+
+        # Renaming the molecule back
+        self.sub_structure.name = old_name
+
         return work
     
     def run_calculation(self, wd : str) -> None:
@@ -1704,6 +1995,8 @@ class ORCA_driver(QM_driver):
         # Saving the structure
         results['Geometry'] = struc.get_sub_structure()
 
+        num_atoms = len(results['Geometry'])
+
         # Creating an empty dictionary for the charges
         results['Charges'] = {}
 
@@ -1727,7 +2020,7 @@ class ORCA_driver(QM_driver):
             # Parse the orbital energies
             if 'ORBITAL ENERGIES' in l:
                 orb_energs = []
-                for j in range(self.sub_structure.get_num_atoms() * 5):
+                for j in range(num_atoms * 5):
                     try:
                         temp = data[i + 4 + j].split()
                         temp = [
@@ -1742,7 +2035,7 @@ class ORCA_driver(QM_driver):
             # Parse the Mulliken charges
             if 'MULLIKEN ATOMIC CHARGES' in l:
                 results['Charges']['Mulliken'] = []
-                for j in range(self.sub_structure.get_num_atoms()):
+                for j in range(num_atoms):
                     temp = data[i + 2 + j].split()
                     results['Charges']['Mulliken'].append([
                                                         temp[1],
@@ -1752,7 +2045,7 @@ class ORCA_driver(QM_driver):
             # Parse the Loewding charges
             if 'LOEWDIN ATOMIC CHARGES' in l:
                 results['Charges']['Loewdin'] = []
-                for j in range(self.sub_structure.get_num_atoms()):
+                for j in range(num_atoms):
                     temp = data[i + 2 + j].split()
                     results['Charges']['Loewdin'].append([
                                                         temp[1],
@@ -1899,6 +2192,123 @@ class PSI4_driver(QM_driver):
 
         # Switch back to the base directory
         os.chdir(here)
+
+        return work
+
+    def cp_prepare_monomer(self,
+                           molecule : str,
+                           x_name : str = "",
+                           ref_path : str = "",
+                           ghost : bool = False) -> str:
+        """ Method to create the input files for a monomer calculation
+
+        Parameters
+        ----------
+        molecule : str
+            The molecule for which the input files should be created.
+            It should be a molecule inside the Collection provided in
+            the constructor of the QM_driver class.
+        x_name : str
+            Additional name to add to this particular run
+        ref_path : str
+            Path to a reference directory where some files could be
+            copied from
+        ghost : bool
+            If True, the monomer will have ghost atoms for the other
+            molecule in the dimer. If False, the monomer will
+            not have ghost atoms.
+        
+        Returns
+        -------
+        work : str
+            The path to the directory where the input files have been
+            placed, and where the QM calculation should be executed
+        """        
+        # Get the current working directory, and creating the directory
+        # for the Psi4 calculation
+        here = os.getcwd()
+        work = os.path.join(here, f'{self.calc_name}{x_name}_{int(time.time() * 1000)}')
+        if os.path.exists(work):
+            shutil.rmtree(work)
+        os.mkdir(work)
+        os.chdir(work)
+
+        # Renaming the molecule as "geometry"
+        old_name = self.sub_structure.name
+        self.sub_structure.name = "geometry"
+
+        # Writing the XYZ file
+        if ghost:
+            self.sub_structure.save_as_xyz()
+        else:
+            t_mol = deepcopy(self.sub_structure.molecules[molecule])
+            t_mol.name = "geometry"
+            t_mol.save_as_xyz()
+
+        # Copy any reference files if provided
+        if ref_path != "":
+            if os.path.exists(os.path.join(ref_path, 'wavefunction.npy')):
+                shutil.copy(
+                    os.path.join(ref_path, 'wavefunction.npy'),
+                    'ref_wfn.npy'
+                )
+                xtra_input = 'set guess read\n'
+                mod_input = ", restart_file='ref_wfn.npy'"
+            else:
+                raise FileNotFoundError("Psi4_driver.cp_prepare_monomer() "
+                                        "The provided reference path does "
+                                        "not contain an wavefunction.npy file!")
+        else:
+            xtra_input = ''
+            mod_input = ''
+        
+        # Create the actual Psi4 input file
+        psi4_inp = (
+            "# Psi4 counterpoise calculation launched by InformalFF\n\n"
+            "molecule geometry {\n"
+            f" {self.props['charge']} {self.props['multipl']}\n"
+        )
+        
+        # Are there any modifiers
+        if len(self.props['modifiers']) != 0:
+            mods = f'{self.props["modifiers"]}\n'
+        else:
+            mods = ''
+
+        # Get all the atoms as a list
+        for a in self.sub_structure.molecules[molecule].get_coords():
+            psi4_inp += f'{a[0]:>3} '
+            psi4_inp += f'{a[1]:>18.10f} {a[1]:>18.10f} {a[2]:>18.10f}\n'
+
+        if ghost:
+            mol_names = list(self.sub_structure.molecules.keys())
+            mol_names.remove(molecule)
+            phantom = mol_names[0]
+            for a in self.sub_structure.molecules[phantom].get_coords():
+                psi4_inp += f'@{a[0]:>2} '
+                psi4_inp += f'{a[1]:>18.10f} {a[1]:>18.10f} {a[2]:>18.10f}\n'
+        
+        psi4_inp += (' units angstrom\n'
+                     f'}}\n\n{xtra_input}'
+                     f'set basis {self.props["basis"]}\n'
+                     f'{mods}'
+                     'd_convergence = 1e-8\n'
+                     f'E, wfn = energy("{self.props["method"]}"{mod_input}, '
+                     'return_wfn=True)\n'
+                     'oeprop(wfn, "MULLIKEN_CHARGES", "LOWDIN_CHARGES", '
+                     'title="Psi4 Results")\n'
+                     'wfn.to_file("wavefunction")\n'
+                    )
+
+        # Write the Psi4 input file
+        with open(os.path.join(work, 'input.dat'), 'w') as g:
+            g.write(psi4_inp)
+
+        # Switch back to the base directory
+        os.chdir(here)
+
+        # Renaming the molecule back
+        self.sub_structure.name = old_name
 
         return work
     

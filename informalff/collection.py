@@ -274,6 +274,16 @@ class Collection(object):
                     f"Collection.__setitem__() The argument {idx} is not an "
                     "integer or a slice object."
             )
+    
+    def __len__(self):
+        """ Method to get the number of atoms in the collection
+
+        Returns
+        -------
+        int
+            The number of atoms in the collection.
+        """
+        return self.__natoms
 
     def add_molecule(self, idm : str, mol : Molecule) -> bool:
         """ Method to add a molecule to the collection
