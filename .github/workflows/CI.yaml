@@ -20,12 +20,42 @@ jobs:
     name: Test on ${{ matrix.os }}, Python ${{ matrix.python-version }}
     runs-on: ${{ matrix.os }}
     strategy:
+      fail-fast: false
       matrix:
         os: [macOS-latest, ubuntu-latest, windows-latest]
-        python-version: [3.9, 3.10, 3.11]
+        python-version: [3.10, 3.11, 3.12]
 
     steps:
-      - uses: actions/checkout@v3
+      - name: Check out repository
+      - uses: actions/checkout@v5
+
+      # More info on options: https://github.com/marketplace/actions/provision-with-micromamba
+      - name: Set up Micromamba environment
+      - uses: mamba-org/setup-micromamba@v2
+        with:
+          environment-file: devtools/conda-envs/test_env.yaml
+          environment-name: informalff-ci
+          cache-environment: true
+          generate-run-shell: true
+      
+      - name: Show environment info
+        shell: micromamba-shell {0}
+        run: |
+          python --version
+          micromamba info
+          which python || where python
+
+      # - name: Set up Python ${{ matrix.python-version }}
+      #   uses: actions/setup-python@v5
+      #   with:
+      #     python-version: ${{ matrix.python-version }}
+      
+      - name: Set up Fortran
+        id: setup-fortran
+        uses: fortran-lang/setup-fortran@v1
+        with:
+          compiler: gcc
+          version: 13
 
       - name: Additional info about the build
         shell: bash
@@ -34,24 +64,28 @@ jobs:
           df -h
           ulimit -a
 
-      # More info on options: https://github.com/marketplace/actions/provision-with-micromamba
-      - uses: mamba-org/setup-micromamba@v2
-        with:
-          micromamba-version: '2.0.4-0'
-          generate-run-shell: false
-          environment-file: devtools/conda-envs/test_env.yaml
-          environment-name: test
-
       - name: Install package
         # conda setup requires this special shell
-        shell: bash -l {0}
+        shell: micromamba-shell {0}
         run: |
-          python -m pip install . --no-deps
+          python -m pip install -e .
           micromamba list
+      
+      - name: Build Fortran shared libraries
+        shell: bash
+        run: |
+          EXT=so
+          if [ "${{ runner.os }}" = "macOS" ]; then EXT=dylib; fi
+          if [ "${{ runner.os }}" = "Windows" ]; then EXT=dll; fi
+
+          for src in $(find . -type f \( -name "*.f90" -o -name "*.f" \)); do
+            mod="${src%.*}"
+            $FC -shared -fPIC "$src" -o "${mod}.${EXT}"
+          done
 
       - name: Run tests
         # conda setup requires this special shell
-        shell: bash -l {0}
+        shell: micromamba-shell {0}
         run: |
           pytest -v --cov=informalff --cov-report=xml --color=yes informalff/tests/
 

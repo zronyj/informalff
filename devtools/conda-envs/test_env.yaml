@@ -6,14 +6,16 @@ dependencies:
     # Base depends
   - python
   - pip
-    # Testing
-  - pytest
-  - pytest-cov
-  - codecov
+  - gfortran
   - numpy
   - pandas
   - scipy
   - sympy
   - matplotlib
+  - tqdm
+    # Testing
+  - pytest
+  - pytest-cov
+  - codecov
   - pip:
     - codecov
