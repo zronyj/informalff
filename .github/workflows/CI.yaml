@@ -27,11 +27,11 @@ jobs:
 
     steps:
       - name: Check out repository
-      - uses: actions/checkout@v5
+        uses: actions/checkout@v5
 
       # More info on options: https://github.com/marketplace/actions/provision-with-micromamba
       - name: Set up Micromamba environment
-      - uses: mamba-org/setup-micromamba@v2
+        uses: mamba-org/setup-micromamba@v2
         with:
           environment-file: devtools/conda-envs/test_env.yaml
           environment-name: informalff-ci
