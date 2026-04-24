@@ -3,7 +3,17 @@ import numpy as np
 import os
 
 here = os.path.dirname(os.path.abspath(__file__))
-geo_lib = ct.cdll.LoadLibrary(os.path.join(here, 'geometries.o'))
+
+if os.system("uname -s") == "Windows":
+    lib_name = "lib_geometries.dll"
+elif os.system("uname -s") == "Darwin":
+    lib_name = "lib_geometries.dylib"
+elif os.system("uname -s") == "Linux":
+    lib_name = "lib_geometries.so"
+else:
+    raise OSError("Unsupported operating system")
+
+geo_lib = ct.cdll.LoadLibrary(os.path.join(here, lib_name))
 
 f_distance_matrix = geo_lib.distance_matrix
 f_distance_matrix.argtypes = [
