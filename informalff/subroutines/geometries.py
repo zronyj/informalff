@@ -1,19 +1,26 @@
 import ctypes as ct
 import numpy as np
+import platform
 import os
 
 here = os.path.dirname(os.path.abspath(__file__))
 
-if os.system("uname -s") == "Windows":
+system = platform.system()
+
+if system == "Windows":
     lib_name = "lib_geometries.dll"
-elif os.system("uname -s") == "Darwin":
+elif system == "Darwin":
     lib_name = "lib_geometries.dylib"
-elif os.system("uname -s") == "Linux":
+elif system == "Linux":
     lib_name = "lib_geometries.so"
 else:
-    raise OSError("Unsupported operating system")
+    raise OSError(f"Unsupported operating system: {system}")
 
-geo_lib = ct.cdll.LoadLibrary(os.path.join(here, lib_name))
+lib_path = os.path.join(here, lib_name)
+if not os.path.exists(lib_path):
+    raise FileNotFoundError(f"Shared library not found: {lib_path}")
+
+geo_lib = ct.CDLL(lib_path)
 
 f_distance_matrix = geo_lib.distance_matrix
 f_distance_matrix.argtypes = [
