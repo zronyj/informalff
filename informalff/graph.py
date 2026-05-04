@@ -52,6 +52,7 @@ class MolecularGraph:
         if atoms_b != atoms:
             if force:
                 self.atoms = sorted(list(pre_bonds))
+                self.hidden = list(range(atoms))
             else:
                 raise ValueError("MolecularGraph.__init__() The number of "
                                 "atoms and the atoms in the bonds do not "
@@ -59,6 +60,7 @@ class MolecularGraph:
                                 f"\nAtoms: {atoms} vs Bonds: {atoms_b}")
         else:
             self.atoms = list(range(atoms))
+            self.hidden = []
         
         self.bonds = bonds
 
@@ -91,6 +93,9 @@ class MolecularGraph:
         -------
         neighbors : list
             The neighbors of the atom"""
+        # Check if the atom is bonded to any other atom
+        if atom not in self.atoms:
+            return []
 
         if depth == 1:
             # Return the neighbors
@@ -431,17 +436,18 @@ class MolecularGraph:
         This means, it will return a list of lists of atoms
         which are connected to each other. If the connecitivity
         list has more than one element, then it's not a single
-        Molecule object.However, if it has one element, it may be
+        Molecule object. However, if it has one element, it may be
         a Molecule, or an Atom.
 
         Returns
         -------
         connectivity : list
-            Connectivity of the molecule"""
+            Connectivity of the molecule
+        """
         connectivity = []
         reference_pool = []
 
-        for atom in self.atoms:
+        for atom in set(self.atoms + self.hidden):
 
             # If the atom has been included as a substructure
             # before, just move on

@@ -2364,6 +2364,8 @@ class PSI4_driver(QM_driver):
         struc.read_xyz(os.path.join(wd, 'geometry.xyz'))
         # Saving the structure
         results['Geometry'] = struc.get_sub_structure()
+
+        num_atoms = len(results['Geometry'])
         
         # Creating an empty dictionary for the charges
         results['Charges'] = {}
@@ -2414,7 +2416,7 @@ class PSI4_driver(QM_driver):
             # Parse the Mulliken charges
             if 'Mulliken Charges: (a.u.)' in l:
                 results['Charges']['Mulliken'] = []
-                for j in range(self.sub_structure.get_num_atoms()):
+                for j in range(num_atoms):
                     temp = data[i + 2 + j].split()
                     results['Charges']['Mulliken'].append([
                                                         temp[1],
@@ -2424,7 +2426,7 @@ class PSI4_driver(QM_driver):
             # Parse the Loewding charges
             if 'Lowdin Charges: (a.u.)' in l:
                 results['Charges']['Loewdin'] = []
-                for j in range(self.sub_structure.get_num_atoms()):
+                for j in range(num_atoms):
                     temp = data[i + 2 + j].split()
                     results['Charges']['Loewdin'].append([
                                                         temp[1],

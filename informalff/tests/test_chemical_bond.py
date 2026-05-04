@@ -653,3 +653,18 @@ def test_chemical_bond_aminophenolate(aminophenolate_ion):
 
     for i in range(len(bond_orders)):
         assert np.isclose(bond_orders[i], expected_bond_orders[i])
+
+def test_chemical_bond_lone_proton(hydronium_ion):
+
+    hydronium_ion.atoms[3].flag = True
+    hydronium_ion.move_selected_atoms([0.0, 0.0, 5.0])
+    hydronium_ion.get_distance_matrix(force=True)
+
+    cb = ChemicalBond(
+        hydronium_ion.atoms,
+        hydronium_ion.bonds,
+        1
+    )
+
+    with pytest.raises(ValueError) as excinfo:
+        bond_list, bond_orders = cb.get_bond_types()

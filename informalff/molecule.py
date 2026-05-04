@@ -1,12 +1,13 @@
-import warnings                                    # To throw warnings instead of raising errors
 import numpy as np                                 # To do basic scientific computing
+from warnings import warn                          # To throw warnings instead of raising errors
+import scipy.constants as cts                      # Universal constants
 from functools import lru_cache                    # To cache functions
 from multiprocessing import Pool, cpu_count        # To parallelize jobs
-import scipy.constants as cts                      # Universal constants
 from scipy.spatial.transform import Rotation as R  # To be able to construct rotation matrices
 
 from .atom import Atom, PERIODIC_TABLE, fibonacci_grid_shell
 from .graph import MolecularGraph
+from .chemical_bond import ChemicalBond
 
 BOHR = 1 / (cts.physical_constants["Bohr radius"][0] * 1e10)
    
@@ -520,18 +521,21 @@ class Molecule(object):
 
         return self.volume
     
-    def _set_bonded_atoms(self) -> None:
+    def _set_bonded_atoms(self,
+                          force : bool = False) -> None:
         """ Method to set the bonded atoms of the molecule to its atoms
 
         This method will assign the bonded atoms of the molecule
         to each of the atoms
+
+        Parameters
+        ----------
+        force : bool
+            Whether to force the recalculation of bonded atoms
         """
         # If the bond list hasn't been created
-        if self.graph is None:
+        if self.graph is None or force:
             self.get_distance_matrix()
-
-        # Create the graph
-        self.graph = MolecularGraph(len(self.atoms), self.bonds)
 
         # Iterate over all atoms
         for i, a in enumerate(self.atoms):
@@ -709,7 +713,38 @@ class Molecule(object):
 
         return False
 
-    def get_distance_matrix(self, tolerance : float = 1.2) -> np.ndarray:
+    def get_bond_types(self, force : bool = False) -> list:
+        """ Method to get the bond types of the molecule
+
+        This method will get the bond types of the molecule using
+        the ChemicalBond class.
+
+        Parameters
+        ----------
+        force : bool
+            Whether to force the recalculation of the bonds
+
+        Returns
+        -------
+        bonds : list of tuples
+            A list of tuples with the bonded atoms and their bond type
+        """
+        if force or len(self.bond_type) == 0:
+            self.get_distance_matrix()
+
+        chem_bonds = ChemicalBond(self.atoms, self.bonds, self.charge)
+        bonds, orders = chem_bonds.get_bond_types()
+
+        self.bonds = []
+        self.bond_type = []
+        for b, o in zip(bonds, orders):
+            self.bonds.append((b[0], b[1]))
+            self.bond_type.append(o)
+
+        return self.bonds, self.bond_type
+
+    def get_distance_matrix(self, tolerance : float = 1.2,
+                            force : bool = False) -> np.ndarray:
         """ Method to get the distances between pairs of atoms
 
         The method also creates the bonds of the molecule object
@@ -718,6 +753,9 @@ class Molecule(object):
         ----------
         tolerance : float
             Tolerance for the distance
+        force : bool
+            Force the recalculation of the distance matrix and
+            ignore the isolated atoms
 
         Returns
         -------
@@ -729,6 +767,9 @@ class Molecule(object):
 
         # Fill the distance matrix with zeros
         dist_mat = np.zeros((num_atoms, num_atoms), dtype=np.float64)
+
+        # Clear the bond table
+        self.bonds = []
 
         # Temporary bond table
         bonds = []
@@ -755,7 +796,15 @@ class Molecule(object):
         # Sort the bonds
         self.bonds.sort(key=lambda k: (k[0], k[1]))
         
-        self.graph = MolecularGraph(num_atoms, self.bonds)
+        # Build the molecular graph
+        self.graph = MolecularGraph(num_atoms, self.bonds, force=force)
+
+        # Warn if the molecule is not a single connected component
+        if force and len(self.graph.get_connectivity()) > 1:
+            warn("Molecule.get_distance_matrix() The molecule is not a single "
+                 "connected component. The distance matrix and the bond list "
+                 "have been calculated ignoring the isolated atoms.\n"
+                 "Consider using a Collection object instead.", UserWarning)
 
         return dist_mat
     

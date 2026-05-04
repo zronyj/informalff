@@ -8,54 +8,62 @@ import pytest
 import numpy as np
 from copy import deepcopy
 
-import informalff
+from informalff import Atom, Molecule, PERIODIC_TABLE
+
+here = os.path.dirname(os.path.abspath(__file__))
 
 @pytest.fixture
 def methane_molecule():
-    c1 = informalff.Atom("C", 0.00000, 0.00000, 0.00000,-1.063938)
-    h1 = informalff.Atom("H", 0.00000, 0.00000, 1.08900, 0.272119)
-    h2 = informalff.Atom("H", 1.02672, 0.00000,-0.36300, 0.263905)
-    h3 = informalff.Atom("H",-0.51336,-0.88916,-0.36300, 0.263954)
-    h4 = informalff.Atom("H",-0.51336, 0.88916,-0.36300, 0.263961)
+    c1 = Atom("C", 0.00000, 0.00000, 0.00000,-1.063938)
+    h1 = Atom("H", 0.00000, 0.00000, 1.08900, 0.272119)
+    h2 = Atom("H", 1.02672, 0.00000,-0.36300, 0.263905)
+    h3 = Atom("H",-0.51336,-0.88916,-0.36300, 0.263954)
+    h4 = Atom("H",-0.51336, 0.88916,-0.36300, 0.263961)
 
     atoms = [c1, h1, h2, h3, h4]
 
-    mol = informalff.Molecule("Methane")
+    mol = Molecule("Methane")
     mol.add_atoms(atoms)
 
     return mol, atoms
 
 @pytest.fixture
 def methanol_molecule():
-    c1 = informalff.Atom("C", 0.01088,-0.00000,-0.08750,-0.698054)
-    o1 = informalff.Atom("O", 0.07641, 0.00000, 1.32886,-0.481487)
-    h1 = informalff.Atom("H", 1.00034, 0.00000,-0.54552, 0.337572)
-    h2 = informalff.Atom("H",-0.52570,-0.88619,-0.42760, 0.287862)
-    h3 = informalff.Atom("H",-0.52570, 0.88619,-0.42760, 0.287884)
-    h4 = informalff.Atom("H", 0.99049, 0.00000, 1.60937, 0.266224)
+    c1 = Atom("C", 0.01088,-0.00000,-0.08750,-0.698054)
+    o1 = Atom("O", 0.07641, 0.00000, 1.32886,-0.481487)
+    h1 = Atom("H", 1.00034, 0.00000,-0.54552, 0.337572)
+    h2 = Atom("H",-0.52570,-0.88619,-0.42760, 0.287862)
+    h3 = Atom("H",-0.52570, 0.88619,-0.42760, 0.287884)
+    h4 = Atom("H", 0.99049, 0.00000, 1.60937, 0.266224)
 
     atoms = [c1, o1, h1, h2, h3, h4]
 
-    mol = informalff.Molecule("Methanol")
+    mol = Molecule("Methanol")
     mol.add_atoms(atoms)
 
     return mol, atoms
 
+@pytest.fixture
+def hydronium_ion():
+    mol = Molecule("Hydronium")
+    mol.read_xyz(os.path.join(here, "mols", "hydronium.xyz"))
+    return mol
+
 def test_molecule_create():
 
-    h1 = informalff.Atom(element="H")
-    h2 = informalff.Atom(element="H")
-    h3 = informalff.Atom(element="H")
-    h4 = informalff.Atom(element="H")
+    h1 = Atom(element="H")
+    h2 = Atom(element="H")
+    h3 = Atom(element="H")
+    h4 = Atom(element="H")
     h1.coordinates = (0.0, 0.0, 0.0)
     h2.coordinates = (1.0, 0.0, 0.0)
     h3.coordinates = (0.5, 0.5, 0.5)
     h4.coordinates = (1.5, 0.5, 0.5)
 
-    mol1 = informalff.Molecule("H2_a")
+    mol1 = Molecule("H2_a")
     mol1.add_atoms(h1, h2)
 
-    mol2 = informalff.Molecule("H2_b")
+    mol2 = Molecule("H2_b")
     mol2.add_atoms(h3, h4)
 
     assert mol1.mol_weight - mol2.mol_weight == 0.0
@@ -75,12 +83,12 @@ def test_molecule_get_set_coords(methane_molecule):
 
 def test_molecule_get_distance_matrix():
 
-    h1 = informalff.Atom(element="H")
-    h2 = informalff.Atom(element="H")
+    h1 = Atom(element="H")
+    h2 = Atom(element="H")
     h1.coordinates = (0.0, 0.0, 0.0)
     h2.coordinates = (1.0, 0.0, 0.0)
 
-    mol1 = informalff.Molecule("H2")
+    mol1 = Molecule("H2")
     mol1.add_atoms(h1, h2)
 
     mat = mol1.get_distance_matrix()
@@ -113,12 +121,12 @@ def test_molecule_get_dihedrals(methanol_molecule):
 
 def test_molecule_geometric_center():
 
-    h1 = informalff.Atom(element="H")
-    h2 = informalff.Atom(element="H")
+    h1 = Atom(element="H")
+    h2 = Atom(element="H")
     h1.coordinates = (0.0, 0.0, 0.0)
     h2.coordinates = (1.0, 0.0, 0.0)
 
-    mol1 = informalff.Molecule("H2")
+    mol1 = Molecule("H2")
     mol1.add_atoms(h1, h2)
 
     assert sum(mol1.get_center()) == 0.5
@@ -357,8 +365,8 @@ def test_molecule_mol_weight(methane_molecule):
 
     mol1, atoms1 = methane_molecule
 
-    mol_weight = informalff.PERIODIC_TABLE.loc["C", "AtomicMass"]
-    mol_weight += 4 * informalff.PERIODIC_TABLE.loc["H", "AtomicMass"]
+    mol_weight = PERIODIC_TABLE.loc["C", "AtomicMass"]
+    mol_weight += 4 * PERIODIC_TABLE.loc["H", "AtomicMass"]
 
     assert pytest.approx(mol1.mol_weight, 1e-3) == pytest.approx(mol_weight, 1e-3)
 
@@ -368,7 +376,7 @@ def test_molecule_save_load_xyz(methane_molecule):
 
     mol1.save_as_xyz()
 
-    mol2 = informalff.Molecule("Methane2")
+    mol2 = Molecule("Methane2")
     mol2.read_xyz("Methane.xyz")
 
     atomsX = len(mol1.atoms) == len(mol2.atoms)
@@ -381,12 +389,12 @@ def test_molecule_save_load_xyz(methane_molecule):
 
 def test_molecule_get_limits():
 
-    h1 = informalff.Atom(element="H")
-    h2 = informalff.Atom(element="H")
+    h1 = Atom(element="H")
+    h2 = Atom(element="H")
     h1.coordinates = (0.0, 0.0, 0.0)
     h2.coordinates = (1.0, 0.0, 0.0)
 
-    mol1 = informalff.Molecule("H2")
+    mol1 = Molecule("H2")
     mol1.add_atoms(h1, h2)
 
     box = mol1.get_limits()
@@ -425,12 +433,20 @@ def test_molecule_chiral(methane_molecule):
 
     here = os.path.dirname(os.path.abspath(__file__))
 
-    mol2 = informalff.Molecule("methanol")
+    mol2 = Molecule("methanol")
     mol2.read_xyz(os.path.join(here, "mols", "methanol.xyz"))
 
-    mol3 = informalff.Molecule("chloro-fluoro-methanol")
+    mol3 = Molecule("chloro-fluoro-methanol")
     mol3.read_xyz(os.path.join(here, "mols", "ClFMeOH.xyz"))
 
     assert not mol1.is_chiral()
     assert not mol2.is_chiral()
     assert mol3.is_chiral()
+
+def test_molecule_graph(hydronium_ion):
+
+    hydronium_ion.atoms[3].flag = True
+    hydronium_ion.move_selected_atoms([0.0, 0.0, 10.0])
+
+    with pytest.warns(UserWarning) as w_info:
+        dmat = hydronium_ion.get_distance_matrix(force=True)
