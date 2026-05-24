@@ -1,13 +1,13 @@
 import copy                          # To copy objects
-import warnings                      # To throw warnings instead of raising errors
 import numpy as np                   # To do basic scientific computing
 import scipy.constants as cts        # Universal constants
+from warnings import warn            # To throw warnings instead of raising errors
 from multiprocessing import Pool     # To parallelize jobs
 from functools import lru_cache      # To cache functions
 from scipy.special import gamma      # To compute the gamma function
 from scipy.optimize import curve_fit # To fit the Subbotin function
 
-from .atom import Atom, PERIODIC_TABLE
+from .atom import PERIODIC_TABLE
 from .molecule import Molecule, BOHR
 
 def _subbotin(x, alpha, sigma, mu):
@@ -361,8 +361,8 @@ class Collection(object):
             self.__remap()
             return True
         else:
-            warnings.warn((f"Collection.remove_molecule() No molecule {idm} "
-                           "in the collection; no molecule deleted."))
+            warn((f"Collection.remove_molecule() No molecule {idm} "
+                  "in the collection; no molecule deleted."))
             return False
     
     def get_atoms(self) -> list:
@@ -795,9 +795,9 @@ class Collection(object):
 
         # If there's less than 2 atoms, there's no point
         if self.__natoms < 2:
-            warnings.warn("Collection.detect_collisions() Not enough "
-                          "molecules in the collection to check for"
-                          "collisions.")
+            warn("Collection.detect_collisions() Not enough "
+                 "molecules in the collection to check for"
+                 "collisions.")
             return False
 
         # Remaining molecules to be checked
@@ -810,21 +810,15 @@ class Collection(object):
             # Iterate over all remaining molecules
             for idm2 in to_check:
                 # Iterate over atoms of both molecules
-                for a1 in self.molecules[idm1].get_coords():
-                    # Find the VdW radius of first atom and its position
-                    vdw_r1 = PERIODIC_TABLE.loc[a1[0], "AtomicRadius"] / BOHR
-                    v1 = np.array(a1[1:4])
-                    for a2 in self.molecules[idm2].get_coords():
-                        # Find the VdW radius of second atom and its position
-                        vdw_r2 = PERIODIC_TABLE.loc[a2[0], "AtomicRadius"] / BOHR
-                        v2 = np.array(a2[1:4])
+                for a1 in self.molecules[idm1].atoms:
+                    for a2 in self.molecules[idm2].atoms:
                         # Compute the minumum distance and the real one
-                        min_dist = (vdw_r1 + vdw_r2) / 100
-                        real_dist = np.linalg.norm(v2 - v1)
+                        min_dist = a1.vdw_radius + a2.vdw_radius
+                        real_dist = np.linalg.norm(a2.coordinates - a1.coordinates)
                         # Check for a collision
                         if real_dist <= min_dist:
-                            warnings.warn("Collection.detect_collisions() "
-                            "Collision found between molecules "
+                            warn("Collection.detect_collisions() "
+                                 "Collision found between molecules "
                             f"{idm1} and {idm2}.")
 
                             return True

@@ -112,7 +112,9 @@ class Atom(object):
     charge : float
         The atom's charge
     radius : float
-        The atom's radius
+        The atom's covalent radius
+    vdw_radius : float
+        The atom's van der Waals radius
     mass : float
         The atom's mass
     bonded_atoms : list
@@ -248,7 +250,7 @@ class Atom(object):
                     "Atom.__get_electronegativity(): "
                     f"Electronegativity not found for {self._element}")
     
-    def __get_atomic_radius(self) -> float:
+    def __get_atomic_radius(self) -> tuple:
         """
         Get the atomic radius of an atom.
 
@@ -256,13 +258,18 @@ class Atom(object):
         -------
         atomic_radius : float
             Atomic radius of the atom.
+        vdw_radius : float
+            Van der Waals radius of the atom.
         """
         # Get the atomic radius of the atom
-        ar = PERIODIC_TABLE.loc[self._element, "AtomicRadius"]
+        cr = PERIODIC_TABLE.loc[self._element, "CovalentRadius"]
+        vdw = PERIODIC_TABLE.loc[self._element, "AtomicRadius"]
 
         # Check if the value exists
-        if ar != "":
-            return (float(ar) / BOHR) / 100
+        if cr != "":
+            covalent = float(cr) / 100 # Convert from pm to Å
+            vanderwaals = float(vdw) / 100 # Convert from pm to Å
+            return covalent, vanderwaals
         else:
             raise ValueError(
                     "Atom.__get_atomic_radius(): "
@@ -292,7 +299,7 @@ class Atom(object):
         """
         Update the properties of the atom.
         """
-        self.radius = self.__get_atomic_radius()
+        self.radius, self.vdw_radius = self.__get_atomic_radius()
         self.mass = self.__get_mass()
         self.electronegativity = self.__get_electronegativity()
         self.oxidation_states = self.__get_oxidation_states()

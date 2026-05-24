@@ -2,6 +2,7 @@
 
 # Add imports here
 from .atom import *
+from .bonding import *
 from .molecule import *
 from .collection import *
 #from .crystal import *

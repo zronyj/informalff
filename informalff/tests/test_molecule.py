@@ -83,17 +83,19 @@ def test_molecule_get_set_coords(methane_molecule):
 
 def test_molecule_get_distance_matrix():
 
+    h2_distance = 0.741
+
     h1 = Atom(element="H")
     h2 = Atom(element="H")
     h1.coordinates = (0.0, 0.0, 0.0)
-    h2.coordinates = (1.0, 0.0, 0.0)
+    h2.coordinates = (h2_distance, 0.0, 0.0)
 
     mol1 = Molecule("H2")
     mol1.add_atoms(h1, h2)
 
     mat = mol1.get_distance_matrix()
 
-    assert mat[0][1] + mat[1][0] == 2
+    assert np.allclose(mat[0][1] + mat[1][0], h2_distance * 2)
 
 def test_molecule_get_bonds(methane_molecule):
 
@@ -184,7 +186,7 @@ def test_molecule_get_molecular_volume(methane_molecule):
 
     vol = mol1.get_molecular_volume(1000, 10)
 
-    assert pytest.approx(vol, 0.03) == 6.5
+    assert pytest.approx(vol, 0.1) == 26.5
 
 def test_molecule_remove_atoms(methane_molecule):
     
@@ -399,7 +401,7 @@ def test_molecule_get_limits():
 
     box = mol1.get_limits()
 
-    assert pytest.approx(box['X'][1] - box['X'][0], 0.1) == 2.27
+    assert pytest.approx(box['X'][1] - box['X'][0], 0.1) == 3.4
 
 def test_molecule_max_distance_to_center(methane_molecule):
 
@@ -425,7 +427,7 @@ def test_molecule_compute_charge_box_grid(methane_molecule):
 
     total_charge = (charge_grid * (0.1)**3).sum()
 
-    assert np.round(total_charge, 1) == 2.5
+    assert np.round(total_charge, 1) == 2.6
 
 def test_molecule_chiral(methane_molecule):
 

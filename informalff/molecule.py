@@ -7,6 +7,7 @@ from scipy.spatial.transform import Rotation as R  # To be able to construct rot
 
 from .atom import Atom, PERIODIC_TABLE, fibonacci_grid_shell
 from .graph import MolecularGraph
+from .bonding import Bonding
 from .chemical_bond import ChemicalBond
 
 BOHR = 1 / (cts.physical_constants["Bohr radius"][0] * 1e10)
@@ -453,13 +454,13 @@ class Molecule(object):
                 # Compute distance between the dot and the atom
                 distance = np.linalg.norm(attempts[j] - a.coordinates)
 
-                # If the distance is less than the radius of the atom
-                if distance < a.radius:
+                # If the distance is less than the VdW radius of the atom
+                if distance < a.vdw_radius:
                     hits += 1
                     break
         
         # Compute the relative volume of the molecule as the
-        # ratio of (dots - hits) to the number of dots
+        # ratio of hits per number of dots
         ratio = hits / dots
 
         return ratio * box_volume
@@ -743,7 +744,7 @@ class Molecule(object):
 
         return self.bonds, self.bond_type
 
-    def get_distance_matrix(self, tolerance : float = 1.2,
+    def get_distance_matrix(self, tolerance : float = 0.2,
                             force : bool = False) -> np.ndarray:
         """ Method to get the distances between pairs of atoms
 
@@ -765,36 +766,21 @@ class Molecule(object):
         # Need the number of atoms
         num_atoms = self.get_num_atoms()
 
-        # Fill the distance matrix with zeros
-        dist_mat = np.zeros((num_atoms, num_atoms), dtype=np.float64)
+        # Build the bonding object
+        bonding = Bonding(self.atoms, tolerance)
 
-        # Clear the bond table
-        self.bonds = []
-
-        # Temporary bond table
-        bonds = []
-
-        # Iterate over all atoms ... twice
-        for i, ai in enumerate(self.atoms):
-            for j, aj in enumerate(self.atoms):
-                # If it's the same atom, the distance is zero
-                if i != j:
-                    # Compute distance
-                    dist_mat[i][j] = self.get_distance(i, j)
-                    # Maximal bond distance
-                    max_dist = (ai.radius + aj.radius) * tolerance
-                    # If the position of both atoms is within bonding distance
-                    if dist_mat[i][j] <= max_dist:
-                        # Add them to a temporary list
-                        temp = sorted([i,j])
-                        bonds.append(f"{temp[0]},{temp[1]}")
-
-        # Re-create the bond table for the molecule
-        for b in set(bonds):
-            self.bonds.append([ int(i) for i in b.split(",") ])
+        # Get the distance matrix
+        try:
+            dist_mat, self.bonds = bonding.distance_matrix()
+        except ValueError as e:
+            warn(f"Molecule.get_distance_matrix() WARNING! {e}\n"
+                 "The distance matrix could not be calculated. Attempting to "
+                 "calculate the bonds without the distance matrix.")
+            dist_mat = None
+            # Get the bonds
+            self.bonds = bonding.find_bonds()
         
-        # Sort the bonds
-        self.bonds.sort(key=lambda k: (k[0], k[1]))
+        print(f"Found {len(self.bonds)} bonds in the molecule.")
         
         # Build the molecular graph
         self.graph = MolecularGraph(num_atoms, self.bonds, force=force)
@@ -863,7 +849,7 @@ class Molecule(object):
                 # Only one of the bonded atoms should be in the other bond
                 if not (b1[0] in b2) and (b1[1] in b2):
                     # Produce a list with the atoms in the angle
-                    temp_a = b1 + [ b2[ (b2.index(b1[1]) + 1) % 2 ] ]
+                    temp_a = list(b1) + [ b2[ (b2.index(b1[1]) + 1) % 2 ] ]
                     # Check that the angle hasn't been added already
                     if (temp_a not in self.angles and
                             temp_a[::-1] not in self.angles):
@@ -871,7 +857,7 @@ class Molecule(object):
                  # Only one of the bonded atoms should be in the other bond
                 if (b1[0] in b2) and not (b1[1] in b2):
                     # Produce a list with the atoms in the angle
-                    temp_b = [ b2[ (b2.index(b1[0]) + 1) % 2 ] ] + b1
+                    temp_b = [ b2[ (b2.index(b1[0]) + 1) % 2 ] ] + list(b1)
                     # Check that the angle hasn't been added already
                     if (temp_b not in self.angles and
                             temp_b[::-1] not in self.angles):
@@ -1808,10 +1794,6 @@ XYZ file of atom selection from molecule: {self.name} - created by InformalFF
             # Get the atoms' atomic radius to pad the molecule
             pad_i = PERIODIC_TABLE.loc[q_trsp['e'][id_l], "AtomicRadius"]
             pad_a = PERIODIC_TABLE.loc[q_trsp['e'][id_h], "AtomicRadius"]
-
-            # From Bohr to pm
-            pad_i /= BOHR
-            pad_a /= BOHR
 
             # From pm to Angstrom
             pad_i /= 100

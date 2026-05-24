@@ -488,13 +488,12 @@ class ChemicalBond:
             # of valence electrons halved, then try expanding the
             # valence electron vector
             if np.sum(lone_pairs) == 0:
-                raise ValueError(
-                            "ChemicalBond.get_bond_types() "
-                            "failed to calculate bond types. "
-                            "The number of valence electrons is "
-                            "not the same as the number of "
-                            "bonds, and there are no lone "
-                            "pairs to expand the valence.")
+                raise ValueError("ChemicalBond.get_bond_types() "
+                                 "failed to calculate bond types. "
+                                 "The number of valence electrons is "
+                                 "not the same as the number of "
+                                 "bonds, and there are no lone "
+                                 "pairs to expand the valence.")
             
             all_bond_orders = self.__try_expansions(valence_electrons,
                                                     lone_pairs,

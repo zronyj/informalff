@@ -480,7 +480,7 @@ def test_chemical_bond_non_bonded_dimer(water_molecule):
     h2_interatomic_vector = wm2[2][1] - wm1[1][1]
 
     move_vector = h2_interatomic_vector / np.linalg.norm(h2_interatomic_vector)
-    move_vector *= (np.linalg.norm(h2_interatomic_vector) + 1.0)
+    move_vector *= (np.linalg.norm(h2_interatomic_vector) + 0.74)
 
     wm2.move_molecule(move_vector)
 

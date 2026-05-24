@@ -21,7 +21,7 @@ def test_periodic_table():
 
     c = informalff.Atom(element="C")
     assert c.mass == 12.011
-    assert pytest.approx(c.radius, 1e-3) == 0.8996
+    assert pytest.approx(c.radius, 1e-3) == 0.76
 
     assert informalff.PERIODIC_TABLE.loc["C", "AtomicNumber"] == 6
 

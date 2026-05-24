@@ -121,7 +121,7 @@ def test_collection_detect_collisions(methane_molecule):
     h1 = informalff.Atom(element="H")
     h2 = informalff.Atom(element="H")
     h1.coordinates = (0.5, 0.5, 1.0)
-    h2.coordinates = (0.5, 1.5, 1.0)
+    h2.coordinates = (0.5, 1.2, 1.0)
 
     mol2 = informalff.Molecule("H2")
     mol2.add_atoms(h1, h2)

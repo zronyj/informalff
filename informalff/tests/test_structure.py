@@ -102,15 +102,21 @@ def test_structure_read_xyz(methane_molecule, methanol_molecule):
     struct2.read_xyz("Methanol.xyz")
     struct3 = informalff.Structure("test")
     struct3.read_xyz("Collection.xyz")
+    struct3.distance_matrix()
+    print(struct3.dist_mat)
 
     mol1b = struct1.get_sub_structure()
     mol2b = struct2.get_sub_structure()
 
     collb = struct3.get_sub_structure()
 
-    assert isinstance(mol1b, informalff.Molecule)
-    assert isinstance(mol2b, informalff.Molecule)
-    assert isinstance(collb, informalff.Collection)
+    assert isinstance(mol1b, informalff.Molecule), ("Expected Molecule object "
+                                                    f"but got {type(mol1b)}")
+    assert isinstance(mol2b, informalff.Molecule), ("Expected Molecule object "
+                                                    f"but got {type(mol2b)}")
+    assert isinstance(collb, informalff.Collection), ("Expected Collection "
+                                                      "object but got "
+                                                      f"{type(collb)}")
 
     atoms1 = len(mol1.atoms) == len(mol1b.atoms)
     weight1 = mol1.mol_weight == mol1b.mol_weight

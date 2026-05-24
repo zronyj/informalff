@@ -1,7 +1,8 @@
 import numpy as np
-import warnings
+from warnings import warn
 
 from .atom import Atom
+from .bonding import Bonding
 from .molecule import Molecule
 from .collection import Collection
 from .graph import MolecularGraph
@@ -103,8 +104,8 @@ class Structure:
     
     def distance_matrix(
             self,
-            box_size : float = 3.0,
-            distance_tol : float = 1.2) -> None:
+            bond_tol : float = 0.3,
+            box_tol : float = 0.5) -> None:
         """
         Method to get the distances between pairs of atoms
 
@@ -112,60 +113,24 @@ class Structure:
 
         Parameters
         ----------
-        box_size : float (optional)
-            The size of the periodic box. Default is 3.0.
-        distance_tol : float (optional)
-            The tolerance for bond detection. Default is 1.2.
+        bond_tol : float
+            The tolerance for the bond lengths. The default value is 0.3 Å.
+        box_tol : float
+            The tolerance for the box dimensions. The default value is 0.5 Å.
         """
-        if len(self.atoms) < 200:
-            # Need the number of atoms
-            num_atoms = len(self.atoms)
+        # Initialize the bonding object
+        bonding = Bonding(self.atoms, box_tol, bond_tol)
 
-            # Check if there are any atoms
-            if num_atoms == 0:
-                raise ValueError("Structure.distance_matrix() There are no "
-                                "atoms in the structure.")
-
-            # Fill the distance matrix with zeros
-            self.dist_mat = np.zeros((num_atoms, num_atoms), dtype=np.float64)
-
-            # Iterate over all atoms ... twice
-            for i, ai in enumerate(self.atoms):
-                for j, aj in enumerate(self.atoms):
-                    # If it's the same atom, the distance is zero
-                    if i != j:
-                        # Compute distance
-                        self.dist_mat[i][j] = np.linalg.norm(
-                                                    ai.coordinates - aj.coordinates
-                                                    )
-
-                        # Check if it's a bond
-                        if self.dist_mat[i][j] < (ai.radius + aj.radius) * distance_tol:
-                            # Create bond pair
-                            if i < j:
-                                bond_pair = (i, j)
-                            else:
-                                bond_pair = (j, i)
-                            # Add it to the bond list
-                            if bond_pair not in self.bonds:
-                                self.bonds.append(bond_pair)
-        else:
-            warnings.warn("Structure.distance_matrix() The number of atoms"
-                          " is too large to compute the distance matrix."
-                          " Only the bond list will be computed.")
-            coords = [a.coordinates for a in self.atoms]
-            radii = [a.radius for a in self.atoms]
-            if len(self.atoms) < 2000:
-                computed_output = get_distance_matrix(coords, radii)
-                # self.dist_mat = computed_output['distance_matrix']
-                self.bonds = computed_output['bonds']
-                del(computed_output)
-            else:
-                self.bonds = get_bond_list(
-                                        coords,
-                                        radii,
-                                        box_size,
-                                        distance_tol)
+        # Get the distance matrix
+        try:
+            self.dist_mat, self.bonds = bonding.distance_matrix()
+        except ValueError as e:
+            warn(f"Structure.distance_matrix() WARNING! {e}\n"
+                 "The distance matrix could not be calculated. Attempting to "
+                 "calculate the bonds without the distance matrix.")
+            self.dist_mat = None
+            # Get the bonds
+            self.bonds = bonding.find_bonds()
     
     def get_sub_structure(self, force : bool = False) -> Molecule | Collection:
         """ Method to get the sub-structures of the given structure
