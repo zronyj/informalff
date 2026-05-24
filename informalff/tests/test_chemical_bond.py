@@ -658,7 +658,11 @@ def test_chemical_bond_lone_proton(hydronium_ion):
 
     hydronium_ion.atoms[3].flag = True
     hydronium_ion.move_selected_atoms([0.0, 0.0, 5.0])
-    hydronium_ion.get_distance_matrix(force=True)
+
+    with pytest.warns(UserWarning,
+                      match=("molecule is not a single "
+                             "connected component")) as excinfo:
+        hydronium_ion.get_distance_matrix(force=True)
 
     cb = ChemicalBond(
         hydronium_ion.atoms,

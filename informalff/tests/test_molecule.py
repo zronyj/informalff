@@ -8,7 +8,7 @@ import pytest
 import numpy as np
 from copy import deepcopy
 
-from informalff import Atom, Molecule, PERIODIC_TABLE
+from informalff import Atom, Molecule, PTE
 
 here = os.path.dirname(os.path.abspath(__file__))
 
@@ -367,8 +367,8 @@ def test_molecule_mol_weight(methane_molecule):
 
     mol1, atoms1 = methane_molecule
 
-    mol_weight = PERIODIC_TABLE.loc["C", "AtomicMass"]
-    mol_weight += 4 * PERIODIC_TABLE.loc["H", "AtomicMass"]
+    mol_weight = PTE["C"].mass
+    mol_weight += 4 * PTE["H"].mass
 
     assert pytest.approx(mol1.mol_weight, 1e-3) == pytest.approx(mol_weight, 1e-3)
 
@@ -409,7 +409,7 @@ def test_molecule_max_distance_to_center(methane_molecule):
 
     atom, distance = mol1.max_distance_to_center()
 
-    assert pytest.approx(distance, 1e-2) == 1.72
+    assert pytest.approx(distance, 1e-2) == 1.089
 
 def test_molecule_charge_in_field(methane_molecule):
 

@@ -13,10 +13,10 @@ from scipy import constants as cts   # To handle physical constants
 from abc import ABC, abstractmethod  # To be able to create several drivers
 
 from .structure import Structure
-from .atom import PERIODIC_TABLE, BOHR
 from .molecule import Molecule
 from .collection import Collection
 
+ANG2BOHR = 1 / (cts.physical_constants["Bohr radius"][0] * 1e10) # 1 Angstrom in Bohr
 BOHR2ANG = cts.physical_constants["Bohr radius"][0] * 1e10  # 1 Bohr in Angstrom
 
 class QM_driver(ABC):
@@ -278,7 +278,7 @@ class QM_driver(ABC):
         output_b = f"{nb_atoms} 3\n"
         for i in range(nb_atoms):
             for j in range(3):
-                output_b += f"{gradient[i][j] / BOHR:18.10f}"
+                output_b += f"{gradient[i][j] / ANG2BOHR:18.10f}"
                 if j != 2:
                     output_b += " "
             output_b += "\n"
@@ -580,7 +580,7 @@ class QM_driver(ABC):
         hess = np.zeros((n_atoms * 3, n_atoms * 3))
 
         # Delta in bohr
-        delta_bohr = delta * BOHR
+        delta_bohr = delta * ANG2BOHR
 
         energies = {k: v for k, v in results}
         for a in range(n_atoms):
@@ -786,7 +786,7 @@ class QM_driver(ABC):
         hess = np.zeros((n_atoms * 3, n_atoms * 3))
 
         # Delta in bohr
-        delta_bohr = delta * BOHR
+        delta_bohr = delta * ANG2BOHR
 
         energies = {k: v for k, v in results}
         for a in range(n_atoms):
@@ -967,7 +967,7 @@ class QM_driver(ABC):
         hess = np.zeros((n_atoms * 3, n_atoms * 3))
 
         # Delta in bohr
-        delta_bohr = delta * BOHR
+        delta_bohr = delta * ANG2BOHR
 
         energies = {k: v for k, v in results}
         for a in range(n_atoms):

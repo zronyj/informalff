@@ -1,14 +1,14 @@
-import copy                          # To copy objects
 import numpy as np                   # To do basic scientific computing
 import scipy.constants as cts        # Universal constants
+from copy import deepcopy            # To copy objects
 from warnings import warn            # To throw warnings instead of raising errors
 from multiprocessing import Pool     # To parallelize jobs
 from functools import lru_cache      # To cache functions
 from scipy.special import gamma      # To compute the gamma function
 from scipy.optimize import curve_fit # To fit the Subbotin function
 
-from .atom import PERIODIC_TABLE
-from .molecule import Molecule, BOHR
+from .elements import PTE
+from .molecule import Molecule
 
 def _subbotin(x, alpha, sigma, mu):
     """ Subbotin function
@@ -525,10 +525,7 @@ class Collection(object):
             for atom in mol.atoms:
 
                 # Take the coordinates of each atom and add them to the center
-                collection_com += atom.coords * PERIODIC_TABLE.loc[
-                                                        atom.element,
-                                                        "AtomicMass"
-                                                ]
+                collection_com += atom.coords * PTE[atom.element].mass
 
         # Scaling it down by the number of atoms
         collection_com /= self.get_total_mass()
@@ -592,12 +589,8 @@ class Collection(object):
             id_h = q_trsp[q].index(high)
 
             # Get the atoms' atomic radius to pad the molecule
-            pad_i = PERIODIC_TABLE.loc[q_trsp['e'][id_l], "AtomicRadius"]
-            pad_a = PERIODIC_TABLE.loc[q_trsp['e'][id_h], "AtomicRadius"]
-
-            # From pm to Angstrom
-            pad_i /= 100
-            pad_a /= 100
+            pad_i = PTE[q_trsp['e'][id_l]].vdw_radius
+            pad_a = PTE[q_trsp['e'][id_h]].vdw_radius
 
             # Compute the limits
             lims[q] = [low - pad_i,
@@ -661,8 +654,7 @@ class Collection(object):
                 # Add the mass of each atom to the bin
                 for q in "XYZ":
                     for i, a in enumerate(q_trsp[q]):
-                        mass = PERIODIC_TABLE.loc[q_trsp['e'][i], "AtomicMass"]
-                        bins[q][bin_idx[q][i]] += mass
+                        bins[q][bin_idx[q][i]] += PTE[q_trsp['e'][i]].mass
 
                 iteration[iter]['bins'] = bins
                 iteration[iter]['seps'] = seps
@@ -1024,13 +1016,13 @@ class Collection(object):
         Ixx = Iyy = Izz = Ixy = Ixz = Iyz = 0.0
 
         for a in shifted_atoms:
-            Ixx += PERIODIC_TABLE.loc[a[0], "AtomicMass"] * (a[1][1]**2 + a[1][2]**2)
-            Iyy += PERIODIC_TABLE.loc[a[0], "AtomicMass"] * (a[1][0]**2 + a[1][2]**2)
-            Izz += PERIODIC_TABLE.loc[a[0], "AtomicMass"] * (a[1][0]**2 + a[1][1]**2)
+            Ixx += PTE[a[0]].mass * (a[1][1]**2 + a[1][2]**2)
+            Iyy += PTE[a[0]].mass * (a[1][0]**2 + a[1][2]**2)
+            Izz += PTE[a[0]].mass * (a[1][0]**2 + a[1][1]**2)
 
-            Ixy += PERIODIC_TABLE.loc[a[0], "AtomicMass"] * (a[1][0] * a[1][1])
-            Ixz += PERIODIC_TABLE.loc[a[0], "AtomicMass"] * (a[1][0] * a[1][2])
-            Iyz += PERIODIC_TABLE.loc[a[0], "AtomicMass"] * (a[1][1] * a[1][2])
+            Ixy += PTE[a[0]].mass * (a[1][0] * a[1][1])
+            Ixz += PTE[a[0]].mass * (a[1][0] * a[1][2])
+            Iyz += PTE[a[0]].mass * (a[1][1] * a[1][2])
         
         inertia_tensor = np.array([
             [ Ixx, -Ixy, -Ixz],
@@ -1264,7 +1256,7 @@ class Collection(object):
                 # Add the molecule to the new collection
                 # If the object is not deepcopied, then the original will
                 # suffer the same fate as the copy
-                sub_c.add_molecule(idm, copy.deepcopy(self.molecules[idm]))
+                sub_c.add_molecule(idm, deepcopy(self.molecules[idm]))
                 # Move the molecule
                 sub_c.molecules[idm].move_molecule(motion)
 

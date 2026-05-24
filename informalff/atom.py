@@ -1,24 +1,9 @@
 
 #import matplotlib.pyplot as plt # Plotting library
-import numpy as np       # To do basic scientific computing
-import os                # To navigate the file system
-import pandas as pd      # To manage tables and databases
-from pathlib import Path # To locate files in the file system
+import numpy as np            # To do basic scientific computing
 import scipy.constants as cts # Universal constants
 
-# ------------------------------------------------------- #
-#              Setting up the Periodic Table              #
-# ------------------------------------------------------- #
-# National Center for Biotechnology Information. "Periodic Table of Elements"
-# PubChem, https://pubchem.ncbi.nlm.nih.gov/periodic-table/.
-# Accessed 20 February, 2024.
-# ------------------------------------------------------- #
-here = Path(globals().get("__file__", "./_")).absolute().parent
-pte_file = os.path.join(here, "data", "PubChemElements_all.csv")
-periodic_data = pd.read_csv(pte_file)
-PERIODIC_TABLE = periodic_data.set_index("Symbol")
-all_symbols = set(PERIODIC_TABLE.index.to_list())
-BOHR = 1 / (cts.physical_constants["Bohr radius"][0] * 1e10)
+from .elements import PTE, all_symbols # To get the properties of the elements in the periodic table
 
 def fibonacci_grid_shell(center : np.ndarray,
                          radius : float = 1.0,
@@ -180,130 +165,17 @@ class Atom(object):
                 f" [{'*' if self.flag else ' '}]")
         return text
     
-    def __get_mass(self) -> float:
-        """
-        Get the mass of an atom.
-
-        Returns
-        -------
-        mass : float
-            Mass of the atom.
-        """
-        return PERIODIC_TABLE.loc[self._element, "AtomicMass"]
-    
-    def __get_electron_configuration(self) -> dict:
-        """
-        Get the electron configuration of an atom.
-
-        Returns
-        -------
-        electron_configuration : dict
-            Electron configuration of the atom.
-        """
-        # Get the electron configuration of the atom
-        ec = PERIODIC_TABLE.loc[self._element, "ElectronConfiguration"]
-
-        # If it's not H or He, remove the lower shells
-        if "]" in ec:
-            ec = ec.split("]")[1]
-        
-        # If the electron configuration is not fully defined
-        if "(" in ec:
-            ec = ec.split("(")[0]
-        
-        # Split the electron configuration into orbital types
-        orb_types = ec.split(" ")
-
-        # Remove any empty strings
-        orb_types = [orb for orb in orb_types if orb != ""]
-
-        # Create a dictionary with the orbital types as keys
-        # and the number of electrons as values
-        electron_configuration = {}
-        for orb_type in orb_types:
-            electron_configuration[orb_type] = int(orb_type[-1])
-            
-        return electron_configuration
-    
-    def __get_electronegativity(self) -> float:
-        """
-        Get the electronegativity of an atom.
-
-        Parameters
-        ----------
-        element : str
-            The symbol of the element of the atom.
-
-        Returns
-        -------
-        electronegativity : int
-            Valence of the atom.
-        """
-        # Get the electronegativity of the atom
-        en = PERIODIC_TABLE.loc[self._element, "Electronegativity"]
-
-        # Check if the value exists
-        if en != "":
-            return float(en)
-        else:
-            raise ValueError(
-                    "Atom.__get_electronegativity(): "
-                    f"Electronegativity not found for {self._element}")
-    
-    def __get_atomic_radius(self) -> tuple:
-        """
-        Get the atomic radius of an atom.
-
-        Returns
-        -------
-        atomic_radius : float
-            Atomic radius of the atom.
-        vdw_radius : float
-            Van der Waals radius of the atom.
-        """
-        # Get the atomic radius of the atom
-        cr = PERIODIC_TABLE.loc[self._element, "CovalentRadius"]
-        vdw = PERIODIC_TABLE.loc[self._element, "AtomicRadius"]
-
-        # Check if the value exists
-        if cr != "":
-            covalent = float(cr) / 100 # Convert from pm to Å
-            vanderwaals = float(vdw) / 100 # Convert from pm to Å
-            return covalent, vanderwaals
-        else:
-            raise ValueError(
-                    "Atom.__get_atomic_radius(): "
-                    f"Atomic radius not found for {self._element}")
-    
-    def __get_oxidation_states(self) -> list:
-        """
-        Get the oxidation states of an atom.
-
-        Returns
-        -------
-        oxidation_states : list
-            Oxidation states of the atom.
-        """
-        # Get the oxidation states of the atom
-        oxs = PERIODIC_TABLE.loc[self._element, "OxidationStates"]
-
-        # Check if the value exists
-        if oxs != "":
-            return [int(ox) for ox in oxs.split(",")]
-        else:
-            raise ValueError(
-                    "Atom.__get_oxidation_states(): "
-                    f"Oxidation states not found for {self._element}")
-    
     def _update_properties(self):
         """
         Update the properties of the atom.
         """
-        self.radius, self.vdw_radius = self.__get_atomic_radius()
-        self.mass = self.__get_mass()
-        self.electronegativity = self.__get_electronegativity()
-        self.oxidation_states = self.__get_oxidation_states()
-    
+        self.vdw_radius = PTE[self._element].vdw_radius
+        self.covalent_radius = PTE[self._element].covalent_radius
+        self.mass = PTE[self._element].mass
+        self.electronegativity = PTE[self._element].electronegativity
+        self.oxidation_states = PTE[self._element].oxidation_states
+        self.electron_configuration = PTE[self._element].electron_configuration
+
     @property
     def element(self) -> str:
         """ Method to get the Atom's element symbol
@@ -534,16 +406,13 @@ class Atom(object):
             "8s" : ["8s", "5g", "6f", "7d", "8p"]
         }
 
-        # Get the electron configuration
-        e_config = self.__get_electron_configuration()
-
         # Calculate how many valence electrons does the atom have
         all_valence_electrons = 0
 
         # ... and also get the shell
         shell = ""
 
-        for ke, ve in e_config.items():
+        for ke, ve in self.electron_configuration.items():
             all_valence_electrons += ve
             if "s" in ke:
                 shell = ke[:-1]

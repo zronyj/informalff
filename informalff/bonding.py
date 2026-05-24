@@ -2,7 +2,7 @@ import numpy as np
 from warnings import warn
 from multiprocessing import Pool, cpu_count
 
-from .atom import PERIODIC_TABLE, BOHR
+from .elements import PTE
 
 # ------------------------------------------------------- #
 #                The Simple Bonding Class                 #
@@ -98,7 +98,7 @@ class Bonding:
         for atom in atoms:
             self.__elements.append(atom.element)
             self.__coords.append(atom.coordinates)
-            self.__radii.append(atom.radius)
+            self.__radii.append(atom.covalent_radius)
         
         self.__cube_size = self.__get_cube_size()
         self.__sq_d = self.__get_possible_distances()
@@ -136,10 +136,7 @@ class Bonding:
         """
         # Get the unique elements and their radii
         elements = set(self.__elements)
-        radii = {e : PERIODIC_TABLE.loc[e, "CovalentRadius"] for e in elements}
-
-        for e in elements:
-            radii[e] /= 100 # Convert from pm to Å
+        radii = {e : PTE[e].covalent_radius for e in elements}
 
         # Compute the possible distances
         possible_distances = {}

@@ -5,7 +5,8 @@ from functools import lru_cache                    # To cache functions
 from multiprocessing import Pool, cpu_count        # To parallelize jobs
 from scipy.spatial.transform import Rotation as R  # To be able to construct rotation matrices
 
-from .atom import Atom, PERIODIC_TABLE, fibonacci_grid_shell
+from .elements import PTE
+from .atom import Atom, fibonacci_grid_shell
 from .graph import MolecularGraph
 from .bonding import Bonding
 from .chemical_bond import ChemicalBond
@@ -1661,13 +1662,13 @@ class Molecule(object):
         Ixx = Iyy = Izz = Ixy = Ixz = Iyz = 0.0
 
         for a in shifted_atoms:
-            Ixx += PERIODIC_TABLE.loc[a[0], "AtomicMass"] * (a[1][1]**2 + a[1][2]**2)
-            Iyy += PERIODIC_TABLE.loc[a[0], "AtomicMass"] * (a[1][0]**2 + a[1][2]**2)
-            Izz += PERIODIC_TABLE.loc[a[0], "AtomicMass"] * (a[1][0]**2 + a[1][1]**2)
+            Ixx += PTE[a[0]].atomic_mass * (a[1][1]**2 + a[1][2]**2)
+            Iyy += PTE[a[0]].atomic_mass * (a[1][0]**2 + a[1][2]**2)
+            Izz += PTE[a[0]].atomic_mass * (a[1][0]**2 + a[1][1]**2)
 
-            Ixy += PERIODIC_TABLE.loc[a[0], "AtomicMass"] * (a[1][0] * a[1][1])
-            Ixz += PERIODIC_TABLE.loc[a[0], "AtomicMass"] * (a[1][0] * a[1][2])
-            Iyz += PERIODIC_TABLE.loc[a[0], "AtomicMass"] * (a[1][1] * a[1][2])
+            Ixy += PTE[a[0]].atomic_mass * (a[1][0] * a[1][1])
+            Ixz += PTE[a[0]].atomic_mass * (a[1][0] * a[1][2])
+            Iyz += PTE[a[0]].atomic_mass * (a[1][1] * a[1][2])
         
         inertia_tensor = np.array([
             [ Ixx, -Ixy, -Ixz],
@@ -1792,12 +1793,8 @@ XYZ file of atom selection from molecule: {self.name} - created by InformalFF
             id_h = q_trsp[q].index(high)
 
             # Get the atoms' atomic radius to pad the molecule
-            pad_i = PERIODIC_TABLE.loc[q_trsp['e'][id_l], "AtomicRadius"]
-            pad_a = PERIODIC_TABLE.loc[q_trsp['e'][id_h], "AtomicRadius"]
-
-            # From pm to Angstrom
-            pad_i /= 100
-            pad_a /= 100
+            pad_i = PTE[q_trsp['e'][id_l]].vdw_radius
+            pad_a = PTE[q_trsp['e'][id_h]].vdw_radius
 
             # Compute the limits
             lims[q] = [low - pad_i,
@@ -1806,7 +1803,9 @@ XYZ file of atom selection from molecule: {self.name} - created by InformalFF
 
         return lims
     
-    def max_distance_to_center(self, center : str = "geom") -> float:
+    def max_distance_to_center(self,
+                               center : str = "geom",
+                               radius : str = "none") -> float:
         """ Method to get the radial distance from the molecule out
 
         Compute find the distance from the center of the molecule to
@@ -1819,6 +1818,11 @@ XYZ file of atom selection from molecule: {self.name} - created by InformalFF
             - com  : center of mass
             - atom : atom closest to the center of mass
             - geom : geometric center (coordinates)
+        radius : str
+            Specify which radius to use:
+            - vdw : VdW radius
+            - cov : covalent radius
+            - none : no radius, just the distance to the nucleus
 
         Returns
         -------
@@ -1839,8 +1843,8 @@ XYZ file of atom selection from molecule: {self.name} - created by InformalFF
 
         # If there's only one atom in the molecule
         if len(self.atoms) == 1:
-            symbol = self.get_coords()[0][0]
-            dist = PERIODIC_TABLE.loc[symbol, "AtomicRadius"] / BOHR / 100
+            symbol = self.atoms[0].element
+            dist = PTE[symbol].vdw_radius
             return 0, dist
         # If there's more than one atom
         else:
@@ -1851,10 +1855,13 @@ XYZ file of atom selection from molecule: {self.name} - created by InformalFF
                 dist_vec = mol_center - np.array(a[1:4])
                 # Compute norm of the vector = distance between nuclei
                 nuclear_dist = np.linalg.norm(dist_vec)
-                # Get the VdW radius of that atom
-                vdw_radius = PERIODIC_TABLE.loc[a[0], "AtomicRadius"] / BOHR / 100
-                # Combine everything
-                temp_dist = nuclear_dist + vdw_radius
+                # Select the radius to be added to the distance
+                if radius == "vdw":
+                    temp_dist = nuclear_dist + PTE[a[0]].vdw_radius
+                elif radius == "cov":
+                    temp_dist = nuclear_dist + PTE[a[0]].covalent_radius
+                else:
+                    temp_dist = nuclear_dist
                 # If this newly computed distance is greater than the last
                 # save it (and the atom), otherwise, just ignore it
                 if temp_dist > dist:

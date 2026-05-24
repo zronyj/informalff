@@ -1,4 +1,3 @@
-import numpy as np
 from warnings import warn
 
 from .atom import Atom
@@ -6,8 +5,6 @@ from .bonding import Bonding
 from .molecule import Molecule
 from .collection import Collection
 from .graph import MolecularGraph
-from .subroutines.geometries import distance_matrix as get_distance_matrix
-from .subroutines.geometries import get_bonds as get_bond_list
 
 # ------------------------------------------------------- #
 #                   The Structure Class                   #
