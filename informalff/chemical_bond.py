@@ -190,7 +190,7 @@ class ChemicalBond:
             # If the bond order is greater than 0.1, it's a bond!
             if np.abs(bond_orders[i]) > 0.1:
                 new_bonds.append(self.__bonds[i])
-                new_bond_orders.append(bond_orders[i])
+                new_bond_orders.append(float(bond_orders[i]))
 
         return new_bonds, new_bond_orders
     
@@ -244,7 +244,7 @@ class ChemicalBond:
     def __ionize(self,
                  charge : int,
                  valence_electrons : np.ndarray,
-                 lone_pairs : np.ndarray) -> np.ndarray:
+                 lone_pairs : np.ndarray) -> tuple:
         """ Method to ionize a structure
 
         Parameters
@@ -258,8 +258,11 @@ class ChemicalBond:
 
         Returns
         -------
-        np.ndarray
-            The ionized valence electrons
+        tuple
+            valence_electrons : np.ndarray
+                The ionized valence electrons
+            lone_pairs : np.ndarray
+                The ionized lone pairs
         """
         # Get atom electronegativities
         electronegativities = []
@@ -398,7 +401,7 @@ class ChemicalBond:
         return valence_electrons, lone_pairs
         
 
-    def get_bond_types(self, allow_multiconfig : bool = False) -> tuple | list:
+    def get_bond_types(self, allow_multiconfig : bool = False) -> dict:
         """ Method to get the bond type of each pair of atoms
 
         Parameters
@@ -408,11 +411,13 @@ class ChemicalBond:
 
         Returns
         -------
-        tuple or list of tuples
-            Tuple containing the following 2 items:
+        dict
+            Dictionary containing the following 4 items:
             - A list of bond_types
             - A list of bond orders
-        
+            - A list of valence electrons
+            - A list of lone pairs
+
         Raises
         ------
         ValueError
@@ -475,7 +480,10 @@ class ChemicalBond:
         # successful and the bond type vector can be returned
         if success:
             new_bonds, new_bond_orders = self.__clean_bond_orders(bond_orders)
-            return new_bonds, new_bond_orders
+            return {"bonds": new_bonds,
+                    "bond_orders": new_bond_orders,
+                    "valence_electrons": valence_electrons,
+                    "lone_pairs": lone_pairs}
     
         else:
             if self.__verbose:
@@ -519,5 +527,8 @@ class ChemicalBond:
                     bond_orders = all_bond_orders[0]
 
             new_bonds, new_bond_orders = self.__clean_bond_orders(bond_orders)
-            return new_bonds, new_bond_orders
+            return {"bonds": new_bonds,
+                    "bond_orders": new_bond_orders,
+                    "valence_electrons": valence_electrons,
+                    "lone_pairs": lone_pairs}
             

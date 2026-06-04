@@ -101,7 +101,7 @@ class Structure:
     
     def distance_matrix(
             self,
-            bond_tol : float = 0.3,
+            bond_tol : float = 0.2,
             box_tol : float = 0.5) -> None:
         """
         Method to get the distances between pairs of atoms
@@ -111,7 +111,8 @@ class Structure:
         Parameters
         ----------
         bond_tol : float
-            The tolerance for the bond lengths. The default value is 0.3 Å.
+            The tolerance for the bond lengths. The default value is 0.2 times
+            the sum of the covalent radii of the two atoms.
         box_tol : float
             The tolerance for the box dimensions. The default value is 0.5 Å.
         """
@@ -124,7 +125,8 @@ class Structure:
         except ValueError as e:
             warn(f"Structure.distance_matrix() WARNING! {e}\n"
                  "The distance matrix could not be calculated. Attempting to "
-                 "calculate the bonds without the distance matrix.")
+                 "calculate the bonds without the distance matrix.",
+                 UserWarning)
             self.dist_mat = None
             # Get the bonds
             self.bonds = bonding.find_bonds()

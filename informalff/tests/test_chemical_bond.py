@@ -159,7 +159,9 @@ def test_chemical_bond_regular_molecule(eugenol_molecule):
         eugenol_molecule.bonds
     )
 
-    bond_list, bond_orders = cb.get_bond_types()
+    bond_data = cb.get_bond_types()
+    bond_list = bond_data['bonds']
+    bond_orders = bond_data['bond_orders']
 
     assert np.allclose(bond_list, expected_bond_list)
 
@@ -217,7 +219,9 @@ def test_chemical_bond_nitro_expansion(picric_acid_molecule):
         picric_acid_molecule.bonds
     )
 
-    bond_list, bond_orders = cb.get_bond_types()
+    bond_data = cb.get_bond_types()
+    bond_list = bond_data['bonds']
+    bond_orders = bond_data['bond_orders']
 
     assert np.allclose(bond_list, expected_bond_list)
 
@@ -261,7 +265,9 @@ def test_chemical_bond_non_aromatic(benzoquinone_molecule):
         benzoquinone_molecule.bonds
     )
 
-    bond_list, bond_orders = cb.get_bond_types()
+    bond_data = cb.get_bond_types()
+    bond_list = bond_data['bonds']
+    bond_orders = bond_data['bond_orders']
 
     assert np.allclose(bond_list, expected_bond_list)
 
@@ -321,7 +327,9 @@ def test_chemical_bond_sulfate_expansion(dnbs_molecule):
         dnbs_molecule.bonds
     )
 
-    bond_list, bond_orders = cb.get_bond_types()
+    bond_data = cb.get_bond_types()
+    bond_list = bond_data['bonds']
+    bond_orders = bond_data['bond_orders']
 
     assert np.allclose(bond_list, expected_bond_list)
 
@@ -357,7 +365,9 @@ def test_chemical_bond_half_bonds(diborane_molecule):
         diborane_molecule.bonds
     )
 
-    bond_list, bond_orders = cb.get_bond_types()
+    bond_data = cb.get_bond_types()
+    bond_list = bond_data['bonds']
+    bond_orders = bond_data['bond_orders']
 
     assert np.allclose(bond_list, expected_bond_list)
 
@@ -381,7 +391,9 @@ def test_chemical_bond_regular_inorganic(hclo_molecule):
         hclo_molecule.bonds
     )
 
-    bond_list, bond_orders = cb.get_bond_types()
+    bond_data = cb.get_bond_types()
+    bond_list = bond_data['bonds']
+    bond_orders = bond_data['bond_orders']
 
     assert np.allclose(bond_list, expected_bond_list)
 
@@ -407,7 +419,9 @@ def test_chemical_bond_chlorine_expansion1(hclo2_molecule):
         hclo2_molecule.bonds
     )
 
-    bond_list, bond_orders = cb.get_bond_types()
+    bond_data = cb.get_bond_types()
+    bond_list = bond_data['bonds']
+    bond_orders = bond_data['bond_orders']
 
     assert np.allclose(bond_list, expected_bond_list)
 
@@ -435,7 +449,9 @@ def test_chemical_bond_chlorine_expansion2(hclo3_molecule):
         hclo3_molecule.bonds
     )
 
-    bond_list, bond_orders = cb.get_bond_types()
+    bond_data = cb.get_bond_types()
+    bond_list = bond_data['bonds']
+    bond_orders = bond_data['bond_orders']
 
     assert np.allclose(bond_list, expected_bond_list)
 
@@ -465,7 +481,9 @@ def test_chemical_bond_chlorine_expansion3(hclo4_molecule):
         hclo4_molecule.bonds
     )
 
-    bond_list, bond_orders = cb.get_bond_types()
+    bond_data = cb.get_bond_types()
+    bond_list = bond_data['bonds']
+    bond_orders = bond_data['bond_orders']
 
     assert np.allclose(bond_list, expected_bond_list)
 
@@ -513,7 +531,9 @@ def test_chemical_bond_non_bonded_dimer(water_molecule):
         dimer.bonds
     )
 
-    bond_list, bond_orders = cb.get_bond_types()
+    bond_data = cb.get_bond_types()
+    bond_list = bond_data['bonds']
+    bond_orders = bond_data['bond_orders']
 
     assert np.allclose(bond_list, expected_bond_list)
 
@@ -542,7 +562,9 @@ def test_chemical_bond_ammonium(ammonium_ion):
         1
     )
 
-    bond_list, bond_orders = cb.get_bond_types()
+    bond_data = cb.get_bond_types()
+    bond_list = bond_data['bonds']
+    bond_orders = bond_data['bond_orders']
 
     assert np.allclose(bond_list, expected_bond_list)
 
@@ -569,7 +591,9 @@ def test_chemical_bond_hydronium(hydronium_ion):
         1
     )
 
-    bond_list, bond_orders = cb.get_bond_types()
+    bond_data = cb.get_bond_types()
+    bond_list = bond_data['bonds']
+    bond_orders = bond_data['bond_orders']
 
     assert np.allclose(bond_list, expected_bond_list)
 
@@ -598,7 +622,9 @@ def test_chemical_bond_sulfate(sulfate_ion):
         -2
     )
 
-    bond_list, bond_orders = cb.get_bond_types()
+    bond_data = cb.get_bond_types()
+    bond_list = bond_data['bonds']
+    bond_orders = bond_data['bond_orders']
 
     assert np.allclose(bond_list, expected_bond_list)
 
@@ -647,7 +673,9 @@ def test_chemical_bond_aminophenolate(aminophenolate_ion):
         -1
     )
 
-    bond_list, bond_orders = cb.get_bond_types()
+    bond_data = cb.get_bond_types()
+    bond_list = bond_data['bonds']
+    bond_orders = bond_data['bond_orders']
 
     assert np.allclose(bond_list, expected_bond_list)
 
@@ -671,4 +699,4 @@ def test_chemical_bond_lone_proton(hydronium_ion):
     )
 
     with pytest.raises(ValueError) as excinfo:
-        bond_list, bond_orders = cb.get_bond_types()
+        bond_data = cb.get_bond_types()

@@ -77,7 +77,7 @@ def test_molecule_get_set_coords(methane_molecule):
 
     mol2.move_molecule(move)
 
-    for i in range(mol1.get_num_atoms()):
+    for i in range(mol1.num_atoms()):
         assert mol1[i][0] == mol2[i][0]
         assert np.allclose(mol2[i][1], mol1[i][1] + move)
 
@@ -194,7 +194,7 @@ def test_molecule_remove_atoms(methane_molecule):
 
     mol1.remove_atoms(2,3)
 
-    assert mol1.get_num_atoms() == 3
+    assert mol1.num_atoms() == 3
 
 
 def test_molecule_move_molecule(methane_molecule):

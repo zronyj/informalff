@@ -107,7 +107,7 @@ class Collection(object):
                         temp = m
                         break
                 content += ("Atoms per molecule: "
-                            f"{self.molecules[temp].get_num_atoms()}\n")
+                            f"{self.molecules[temp].num_atoms()}\n")
             content += "\n         Limits\n------------------------------\n"
             lims = self.get_limits()
             content += "     Lower    Upper  Side\n"
@@ -326,7 +326,7 @@ class Collection(object):
 
         # Increment the number of molecules and atoms
         self.__nmols += 1
-        self.__natoms += mol.get_num_atoms()
+        self.__natoms += mol.num_atoms()
 
         # Update the atoms reference map
         self.__remap()
@@ -353,7 +353,7 @@ class Collection(object):
 
         # Check that the molecule actually exists
         if idm in self.molecules.keys():
-            self.__natoms -= self.molecules[idm].get_num_atoms()
+            self.__natoms -= self.molecules[idm].num_atoms()
             self.__nmols -= 1
             # Remove the molecule from the collection
             del self.molecules[idm]
@@ -381,7 +381,7 @@ class Collection(object):
 
         return todos
 
-    def get_num_atoms(self) -> int:
+    def num_atoms(self) -> int:
         """ Method to get the number of atoms in the collection
 
         Returns

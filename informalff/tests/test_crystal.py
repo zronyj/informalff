@@ -166,7 +166,9 @@ def test_crystal_construction_and_symops(paracetamol_cell):
     here = os.path.dirname(os.path.abspath(__file__))
 
     cry = informalff.Crystal("paracetamol")
-    cry.read_cif(os.path.join(here, "mols", "paracetamol.cif"))
+    cry.read_cif(os.path.join(here,
+                              "crystals",
+                              "paracetamol.cif"))
 
     cry.cell.params == cell_param.params
     assert pytest.approx(cry.cell.volume, 1e-2) == pctml["volume"]
@@ -183,7 +185,9 @@ def test_crystal_change_cell():
 
     here = os.path.dirname(os.path.abspath(__file__))
     cry = informalff.Crystal("paracetamol")
-    cry.read_cif(os.path.join(here, "mols", "paracetamol.cif"))
+    cry.read_cif(os.path.join(here,
+                              "crystals",
+                              "paracetamol.cif"))
 
     o_params = cry.cell.params
 

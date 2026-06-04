@@ -5,7 +5,7 @@ from functools import lru_cache                    # To cache functions
 from multiprocessing import Pool, cpu_count        # To parallelize jobs
 from scipy.spatial.transform import Rotation as R  # To be able to construct rotation matrices
 
-from .elements import PTE
+from .elements import PTE, GEOMETRIES
 from .atom import Atom, fibonacci_grid_shell
 from .graph import MolecularGraph
 from .bonding import Bonding
@@ -60,7 +60,7 @@ class Molecule(object):
         self.name = name
         self.atoms = []
         self.bonds = []
-        self.bond_type = []
+        self.bond_types = []
         self.angles = []
         self.dihedrals = []
         self.torsions = []
@@ -81,12 +81,21 @@ class Molecule(object):
             The atom's element symbol, its coordinates
             and its flag
         """
+        # Create the headers of the atom table
+        head = (f" ID   Elem {'x':^17} {'y':^17} {'z':^17}"
+                f" {'Charge':^14}  Sel\n")
+
         # Show the number of atoms in the molecule
-        temp = f"Atoms[{len(self.atoms)}] for {self.name}\n"
+        temp = f"Atoms[{len(self.atoms)}] for {self.name} : {self.formula}\n"
+        temp += "-" * 84 + "\n"
+        temp += head
+        temp += "-" * 84 + "\n"
 
         # Add the information of every atom to the final string
         for i, a in enumerate(self.atoms):
             temp += f"{i:>4} {str(a)}\n"
+        
+        temp += "-" * 84
 
         return temp
 
@@ -156,12 +165,12 @@ class Molecule(object):
             raise TypeError("Molecule.remove_atoms() No atom indices "
                             "were provided.")
         # Check if there are any atoms to remove
-        if self.get_num_atoms() == 0:
+        if self.num_atoms() == 0:
             raise ValueError("Molecule.remove_atoms() There are no "
                              "atoms to be removed.")
         # Check if all the provided atom indices are within range
         for w in atoms:
-            if (w < 1) or (w > self.get_num_atoms()):
+            if (w < 1) or (w > self.num_atoms()):
                 raise ValueError("Molecule.remove_atoms() The provided "
                                  f"atom index {w} is out of range!")
         
@@ -366,7 +375,7 @@ class Molecule(object):
             A `list` of floats with all the charges for the atoms.
         """
         # Sanity check
-        if len(charges) != self.get_num_atoms():
+        if len(charges) != self.num_atoms():
             raise ValueError("Molecule.assign_charges() The number of charges"
                              " is not the same as the number of atoms in the "
                              "molecule!")
@@ -393,6 +402,45 @@ class Molecule(object):
             self._mol_weight += a.mass
 
         return self._mol_weight
+    
+    def get_formula(self) -> str:
+        """ Method to get the molecule's formula
+
+        Returns
+        -------
+        str
+            The formula of the molecule
+        """
+        # Initialize a dictionary to count the number of atoms of each element
+        d_formula = {}
+
+        # Iterate over all atoms
+        for a in self.atoms:
+
+            # Ensure that the element exists in the dictionary
+            if a.element not in d_formula:
+                d_formula[a.element] = 0
+            
+            # Increment the counter for the element
+            d_formula[a.element] += 1
+
+        # Sort the dictionary alphabetically by element
+        return dict(sorted(d_formula.items(), key=lambda item: item[0]))
+    
+    @property
+    def formula(self) -> str:
+        """ Method to get the molecule's formula
+
+        Returns
+        -------
+        str
+            The formula of the molecule
+        """
+        # Fetch the formula as a dictionary
+        d_form = self.get_formula()
+
+        # Build the formula string
+        return "".join([f"{k}{v}" for k, v in d_form.items()])
 
     def get_coords(self) -> list:
         """ Method to get the molecule's coordinates
@@ -411,7 +459,7 @@ class Molecule(object):
 
         return todos
 
-    def get_num_atoms(self) -> int:
+    def num_atoms(self) -> int:
         """ Method to get the number of atoms in the molecule
 
         Returns
@@ -523,8 +571,7 @@ class Molecule(object):
 
         return self.volume
     
-    def _set_bonded_atoms(self,
-                          force : bool = False) -> None:
+    def _set_bonded_atoms(self, force : bool = False) -> None:
         """ Method to set the bonded atoms of the molecule to its atoms
 
         This method will assign the bonded atoms of the molecule
@@ -582,6 +629,157 @@ class Molecule(object):
 
         return atom_graph
     
+    def __atom_geometry(self,
+                        atom_idx : int,
+                        lone_pairs : int,
+                        tolerance : float = 0.2) -> dict:
+        """ Method to get the geometry of an atom
+
+        Parameters
+        ----------
+        atom_idx : int
+            Index of the atom to check
+        lone_pairs : int
+            Number of lone pairs of the atom
+        tolerance : float
+            Tolerance for the angles of the neighboring atoms, as a
+            percentage of the expected angles for the geometry.
+
+        Returns
+        -------
+        dict
+            Dictionary containing the geometric details of the atom
+        """
+        # Get the neighbor atoms
+        neighbors = self.atoms[atom_idx].bonded_atoms
+        num_ngbrs = len(neighbors)
+
+        if num_ngbrs == 0:
+            raise ValueError("Molecule.__atom_geometry() The atom has no "
+                             "neighbors. Check the molecule's structure.")
+        
+        if num_ngbrs == 1:
+            return {"geometry": "terminal",
+                "char": "X",
+                "angles": ()}
+
+        geom_key = (num_ngbrs, lone_pairs)
+        if geom_key not in GEOMETRIES:
+            raise ValueError("Molecule.__atom_geometry() Geometry "
+                             f"not found for configuration {geom_key}")
+        
+        # Compute all possible angles of the molecule
+        all_angles = self.get_angles()
+
+        # Initialize angles dictionary
+        angles = {}
+
+        # Iterate over all atoms bonded to the given atom
+        for j in neighbors:
+            for k in neighbors:
+
+                # Only consider pairs of bonded atoms that are not the same
+                if j != k:
+
+                    # Create the angle key
+                    a1, a3 = sorted([j, k])
+                    key = (a1, atom_idx, a3)
+
+                    if key not in all_angles:
+                        raise ValueError("Molecule.__atom_geometry() "
+                                         f"Angle not found for atoms {a1}, "
+                                         f"{atom_idx}, {a3}. Check the "
+                                         "molecule's structure.")
+
+                    # Check that the angle hasn't been added already
+                    if key not in angles:
+                        angles[key] = self.get_angle(a1, atom_idx, a3)
+                    else:
+                        angles[key] = min(angles[key],
+                                          self.get_angle(a1, atom_idx, a3))
+        
+        # Ensure that the angles are within the tolerance
+        # of the expected angles
+        validated = [False for _ in range(len(angles))]
+
+        # Establish the upper and lower limits for the angles
+        angles_upper = np.array(GEOMETRIES[geom_key].angles) * (1 + tolerance)
+        angles_lower = np.array(GEOMETRIES[geom_key].angles) * (1 - tolerance)
+
+        # Iterate over all calculated angles
+        for ida, angle in enumerate(angles.values()):
+            for lower, upper in zip(angles_lower, angles_upper):
+                if angle >= lower and angle <= upper:
+                    validated[ida] = True
+                    break
+        
+        if not all(validated):
+            warn(f"Molecule.__atom_geometry() WARNING! The angles for "
+                 f"atom {atom_idx} do not match the those for geometry "
+                 f"{GEOMETRIES[geom_key].geometry} within the tolerance of "
+                 f"{tolerance}. Consider increasing the tolerance or checking "
+                 f"the molecule's structure.")
+        
+        return {"geometry": GEOMETRIES[geom_key].geometry,
+                "char": GEOMETRIES[geom_key].char,
+                "angles": angles}
+
+    def _atom_neighborhood(self,
+                           atom_idx : int,
+                           depth : int = 1,
+                           ignore : int = None) -> str:
+        """ Method to get details about the  neighbohood of the given atom
+
+        Parameters
+        ----------
+        atom_idx : int
+            Index of the atom to check
+        depth : int, optional
+            Depth of the neighborhood to consider (default = 1)
+        ignore : int, optional
+            Index of the atom to ignore, by default None
+
+        Returns
+        -------
+        neighbor_details : dict
+            Dictionary containing the details of the neighboring atoms
+        """
+        # If the bond type list hasn't been created
+        if len(self.bond_types) == 0:
+            self.get_bond_types()
+        
+        # Get the masses of each neighboring atom
+        ngbr_details = {}
+        for neighbor in self.atoms[atom_idx].bonded_atoms:
+
+            # Ignore the given atom
+            if neighbor == ignore:
+                continue
+
+            # Build the bond to be located in the bond list
+            bond = tuple(sorted((atom_idx, neighbor)))
+
+            # Get the index of the bond
+            idx = self.bonds.index(bond)
+
+            # Create the neighbor details dictionary
+            ngbr_details[neighbor] = {
+                "mass": self.atoms[neighbor].mass,
+                "bond_type": self.bond_types[idx]
+            }
+
+            # If the depth is greater than 1, get the neighbors of the neighbor
+            if depth > 1:
+                ngbr_details[neighbor]["neighbors"] = self._atom_neighborhood(
+                    neighbor, depth=depth-1, ignore=atom_idx
+                )
+
+        # Sort the neighbors by mass
+        ngbr_details = dict(sorted(ngbr_details.items(),
+                                       key=lambda item: item[1]["mass"]))
+        
+        return ngbr_details
+    
     def _is_stereocenter(self, i : int) -> bool:
         """ Method to check if an atom is is a stereocenter
 
@@ -628,14 +826,14 @@ class Molecule(object):
                 proj = np.dot(normals[j], normals[(j+1)%3])
                 projs.append(np.abs(proj))
             
-            if (np.array(projs) > 0.9).all():
+            if np.all(np.array(projs) > 0.9):
                 return False
             else:
 
                 # If the normals are not parallel, it could be
                 # a stereocenter
                 o_branches = []
-                for d in range(1, self.get_num_atoms()):
+                for d in range(1, self.num_atoms()):
                     g = self.graph.get_neighbors(i, depth=d)
                     n_branches = self._graph_to_atoms(g)
                     b12 = n_branches[0] == n_branches[1]
@@ -671,14 +869,14 @@ class Molecule(object):
                 proj = np.dot(normals[j], normals[(j+1)%4])
                 projs.append(np.abs(proj))
             
-            if (np.array(projs) > 0.9).all():
+            if np.all(np.array(projs) > 0.9):
                 return False
             else:
 
                 # If the normals are not parallel, it could be
                 # a stereocenter
                 o_branches = []
-                for d in range(1, self.get_num_atoms()):
+                for d in range(1, self.num_atoms()):
                     g = self.graph.get_neighbors(i, depth=d)
                     n_branches = self._graph_to_atoms(g)
                     inter_atom = []
@@ -693,6 +891,58 @@ class Molecule(object):
                         o_branches = n_branches.copy()
         else:
             return False
+    
+    def atomic_details(self,
+                       angle_tolerance : float = 0.2,
+                       nth_neighbors : int = 1) -> dict:
+        """ Method to get details about the atoms in the molecule
+
+        Parameters
+        ----------
+        angle_tolerance : float
+            Tolerance for the angles of the neighboring atoms, as a
+            percentage of the expected angles for the geometry.
+        nth_neighbors : int
+            Depth of neighbors to consider in the neighborhood details
+
+        Returns
+        -------
+        details : dict
+            Dictionary containing the details of the atom
+        """
+        # Compute the bond types if they haven't been computed yet
+        if len(self.bond_types) == 0:
+            self.get_bond_types()
+        
+        # Get the molecule's electronic distribution
+        chem_bonds = self._compute_elecron_distribution()
+    
+        # Get the geometric details of the atom
+        details = []
+        for atom_idx in range(self.num_atoms()):
+
+            # Compute the geometric details
+            geometric_details = self.__atom_geometry(
+                                    atom_idx,
+                                    chem_bonds["lone_pairs"][atom_idx],
+                                    angle_tolerance
+                                )
+            
+            # Compute the neighborhood details
+            neighborhood_details = self._atom_neighborhood(atom_idx,
+                                                           nth_neighbors)
+            
+            # Check if the atom is a stereocenter
+            stereo = self._is_stereocenter(atom_idx)
+            
+            details.append({
+                "element": self.atoms[atom_idx].element,
+                "stereocenter": stereo,
+                "geometry": geometric_details,
+                "neighborhood": neighborhood_details
+            })
+
+        return details
 
     def is_chiral(self) -> bool:
         """ Method to check if the molecule is chiral
@@ -714,6 +964,32 @@ class Molecule(object):
                 return True
 
         return False
+    
+    def _compute_elecron_distribution(self, force : bool = False) -> dict:
+        """ Method to compute the bond structure of the molecule
+
+        This method will compute the bond structure of the molecule,
+        which includes the number of electrons in each atom and the
+        bond orders of the bonds in the molecule. To do so, it will
+        use the ChemicalBond class.
+
+        Parameters
+        ----------
+        force : bool
+            Whether to force the recalculation of the bond structure
+
+        Returns
+        -------
+        e_dist : dict
+            A dictionary with the number of electrons in each atom
+        """
+        # Check if the bond types have already been calculated
+        if len(self.bonds) == 0 or force:
+            self.get_bonds()
+
+        chem_bonds = ChemicalBond(self.atoms, self.bonds, self.charge)
+
+        return chem_bonds.get_bond_types()
 
     def get_bond_types(self, force : bool = False) -> list:
         """ Method to get the bond types of the molecule
@@ -731,19 +1007,20 @@ class Molecule(object):
         bonds : list of tuples
             A list of tuples with the bonded atoms and their bond type
         """
-        if force or len(self.bond_type) == 0:
-            self.get_distance_matrix()
-
-        chem_bonds = ChemicalBond(self.atoms, self.bonds, self.charge)
-        bonds, orders = chem_bonds.get_bond_types()
-
+        # Check if the bonds have already been calculated
+        if len(self.bonds) == 0 or force:
+            self.get_bonds()
+        
+        # Get the information on the electrons of each atom in the molecule
+        bond_data = self._compute_elecron_distribution()  # Pack everything nicely
         self.bonds = []
-        self.bond_type = []
-        for b, o in zip(bonds, orders):
-            self.bonds.append((b[0], b[1]))
-            self.bond_type.append(o)
+        self.bond_types = []
 
-        return self.bonds, self.bond_type
+        for b, o in zip(bond_data["bonds"], bond_data["bond_orders"]):
+            self.bonds.append((b[0], b[1]))
+            self.bond_types.append(o)
+
+        return self.bonds, self.bond_types
 
     def get_distance_matrix(self, tolerance : float = 0.2,
                             force : bool = False) -> np.ndarray:
@@ -765,7 +1042,7 @@ class Molecule(object):
             Distance matrix of the molecule
         """
         # Need the number of atoms
-        num_atoms = self.get_num_atoms()
+        num_atoms = self.num_atoms()
 
         # Build the bonding object
         bonding = Bonding(self.atoms, tolerance)
@@ -780,8 +1057,6 @@ class Molecule(object):
             dist_mat = None
             # Get the bonds
             self.bonds = bonding.find_bonds()
-        
-        print(f"Found {len(self.bonds)} bonds in the molecule.")
         
         # Build the molecular graph
         self.graph = MolecularGraph(num_atoms, self.bonds, force=force)
@@ -849,19 +1124,21 @@ class Molecule(object):
             for b2 in self.bonds:
                 # Only one of the bonded atoms should be in the other bond
                 if not (b1[0] in b2) and (b1[1] in b2):
+                    # Create the angle key
+                    a1, a3 = sorted([b1[0], b2[ (b2.index(b1[1]) + 1) % 2]])
                     # Produce a list with the atoms in the angle
-                    temp_a = list(b1) + [ b2[ (b2.index(b1[1]) + 1) % 2 ] ]
+                    temp_a = (a1, b1[1], a3)
                     # Check that the angle hasn't been added already
-                    if (temp_a not in self.angles and
-                            temp_a[::-1] not in self.angles):
+                    if temp_a not in self.angles:
                         self.angles.append(temp_a)
                  # Only one of the bonded atoms should be in the other bond
                 if (b1[0] in b2) and not (b1[1] in b2):
+                    # Create the angle key
+                    a1, a3 = sorted([b1[1], b2[ (b2.index(b1[0]) + 1) % 2 ] ])
                     # Produce a list with the atoms in the angle
-                    temp_b = [ b2[ (b2.index(b1[0]) + 1) % 2 ] ] + list(b1)
+                    temp_b = (a1, b1[0], a3)
                     # Check that the angle hasn't been added already
-                    if (temp_b not in self.angles and
-                            temp_b[::-1] not in self.angles):
+                    if temp_b not in self.angles:
                         self.angles.append(temp_b)
 
         return self.angles
@@ -901,7 +1178,7 @@ class Molecule(object):
                     # If it's the atom on the left ...
                     if b1[0] == a1[0]:
                        # Produce a list with the atoms in the dihedral
-                       temp_a = [ b1[1] ] + a1
+                       temp_a = tuple([ b1[1] ] + list(a1))
                        # Check that the dihedral hasn't been added already
                        if (temp_a not in self.dihedrals and
                            temp_a[::-1] not in self.dihedrals):
@@ -909,7 +1186,7 @@ class Molecule(object):
                     # If it's the atom on the right ...
                     if b1[0] == a1[2]:
                        # Produce a list with the atoms in the dihedral
-                       temp_b = a1 + [ b1[1] ]
+                       temp_b = tuple(list(a1) + [ b1[1] ])
                        # Check that the dihedral hasn't been added already
                        if (temp_b not in self.dihedrals and
                            temp_b[::-1] not in self.dihedrals):
@@ -917,11 +1194,15 @@ class Molecule(object):
 
         return self.dihedrals
 
-    def get_torsions(self, force : bool = False) -> list:
+    def get_torsions(self,
+                     no_rings : bool = True,
+                     force : bool = False) -> list:
         """ Method to get the list of torsions in the molecule
         
         Parameters
         ----------
+        no_rings : bool
+            Whether to exclude torsions that are part of rings
         force : bool
             Force the recalculation of the torsions?
         
@@ -945,11 +1226,37 @@ class Molecule(object):
         # Get all the rings in the molecule
         rings = self.graph.get_rings()
 
+        # Get the bond types of the molecule
+        if len(self.bond_type) == 0:
+            _, orders = self.get_bond_types()
+        
+        b_orders = dict(zip(self.bonds, orders))
+
         potential = []
         # Iterate over all dihedrals (reference atoms)
         for d in self.dihedrals:
-            temp = sorted(d[1:3])
-            if temp not in potential:
+
+            # Create a tuple with the two central atoms of the dihedral,
+            # sorted, so as to access the bond order
+            temp = tuple(sorted(d[1:3]))
+
+            # Get the bond order
+            order = b_orders[temp]
+
+            # Check that the dihedral hasn't been added already and
+            # that the bond order is 1 (i.e. single bond). The latter
+            # ensures that the torsions are actually rotatable
+            if temp not in potential and order == 1.0:
+
+                # If torsions in rings are to be excluded ...
+                if no_rings:
+
+                    # Iterate over all rings in the molecule
+                    for r in rings:
+                        if temp[0] in r and temp[1] in r:
+                            continue
+                
+                # Add the dihedral to the list
                 potential.append(temp)
 
         self.torsions = potential.copy()
@@ -1052,6 +1359,48 @@ class Molecule(object):
         
         self.move_molecule(mol_center)
     
+    def rotate_molecule_over_center_matrix(self,
+                                           rotation_matrix : np.ndarray,
+                                           center : str = "geom") -> None:
+        """ Method to rotate the molecule around its center
+
+        Rotates the molecule according to its Euler angles
+
+        Parameters
+        ----------
+        rotation_matrix : ndarray
+            A NumPy array with the rotation matrix for the
+            rotation of the molecule.
+        center : str
+            Specify which center of the molecule to use:
+            - com  : center of mass
+            - atom : atom closest to the center of mass
+            - geom : geometric center (coordinates)
+        """
+        if center == "com":
+            mol_center = self.get_center_of_mass()
+        elif center == "atom":
+            mol_center = self.get_center_atom()[2]
+        else:
+            mol_center = self.get_center()
+
+        self.move_molecule(-1 * mol_center)
+
+        # Iterate over all atoms in the molecule ...
+        for a in self.atoms:
+            # Extract the atomic coordinates
+            position = a.coordinates
+            # Compute the new coordinates
+            new_coords = rotation_matrix @ position
+            # Set the new coordinates
+            a.coordinates = { 
+                "x" : new_coords[0],
+                "y" : new_coords[1],
+                "z" : new_coords[2]
+            }
+        
+        self.move_molecule(mol_center)
+
     def rotate_selected_atoms_over_center(self,
                                           euler_angles : np.ndarray,
                                           center : str = "geom") -> None:
@@ -1095,6 +1444,54 @@ class Molecule(object):
             position = a.coordinates
             # Compute the new coordinates
             new_coords = r.as_matrix() @ position
+            # Set the new coordinates
+            a.coordinates = {
+                "x" : new_coords[0],
+                "y" : new_coords[1],
+                "z" : new_coords[2]
+            }
+        
+        self.move_molecule(mol_center)
+    
+    def rotate_selected_atoms_over_center_matrix(self,
+                                          rotation_matrix : np.ndarray,
+                                          center : str = "geom") -> None:
+        """ Method to rotate some atoms over their center
+
+        Rotates some atoms according to its Euler angles
+
+        Parameters
+        ----------
+        rotation_matrix : ndarray
+            A NumPy array with the rotation matrix for the rotation of
+            the selected atoms. Keep in mind that the selected atoms have
+            to be taken to the origin to make these rotations.
+        center : str
+            Specify which center of the molecule to use:
+            - com  : center of mass
+            - atom : atom closest to the center of mass
+            - geom : geometric center (coordinates)
+        """
+        temp_mol = Molecule("__temporary_molecule__")
+        for a in self.atoms:
+            if a.flag:
+                temp_mol.add_atoms(a)
+
+        if center == "com":
+            mol_center = temp_mol.get_center_of_mass()
+        elif center == "atom":
+            mol_center = temp_mol.get_center_atom()[2]
+        else:
+            mol_center = temp_mol.get_center()
+
+        self.move_molecule(-1 * mol_center)
+
+        # Iterate over all atoms in the molecule ...
+        for a in self.atoms:
+            # Extract the atomic coordinates
+            position = a.coordinates
+            # Compute the new coordinates
+            new_coords = rotation_matrix @ position
             # Set the new coordinates
             a.coordinates = {
                 "x" : new_coords[0],
@@ -1474,7 +1871,7 @@ class Molecule(object):
         # In degrees
         angle *= 180/np.pi
 
-        return angle
+        return float(angle)
 
     def get_dihedral(self,
                      a1 : int,
@@ -1758,7 +2155,7 @@ XYZ file of atom selection from molecule: {self.name} - created by InformalFF
         """ Method to get the geometric limits of the molecule
 
         Compute find the limits of the molecule, considering the
-        atomic radii of the atoms.
+        Van der Waals radii of the atoms.
 
         Returns
         -------
@@ -1792,7 +2189,7 @@ XYZ file of atom selection from molecule: {self.name} - created by InformalFF
             id_l = q_trsp[q].index(low)
             id_h = q_trsp[q].index(high)
 
-            # Get the atoms' atomic radius to pad the molecule
+            # Get the atoms' Van der Waals radius to pad the molecule
             pad_i = PTE[q_trsp['e'][id_l]].vdw_radius
             pad_a = PTE[q_trsp['e'][id_h]].vdw_radius
 

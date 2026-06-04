@@ -146,8 +146,8 @@ class Atom(object):
 
         self.bonded_atoms = []
 
-    def __repr__(self) -> str:
-        """ Atom representation method
+    def __str__(self) -> str:
+        """ Method to show the Atom's information as a string
 
         This method builds a string with the information
         of the Atom object. Said string will be displayed
@@ -159,9 +159,9 @@ class Atom(object):
                 The atom's element symbol, its coordinates
                 and its flag
         """
-        text = (f" {self._element} {self._coords[0]:16.8f} "
-                f"{self._coords[1]:16.8f} {self._coords[2]:16.8f}"
-                f" q(+/-) {self.charge:16.8f} "
+        text = (f" {self._element:>4} {self._coords[0]:17.8f} "
+                f"{self._coords[1]:17.8f} {self._coords[2]:17.8f} "
+                f"{self.charge:>14.8f} "
                 f" [{'*' if self.flag else ' '}]")
         return text
     
@@ -357,16 +357,6 @@ class Atom(object):
                 grid[q] = grid[q] + temp_grid[q]
 
         return grid
-    
-    def get_bonded_atoms(self) -> list:
-        """ Method to get the atom's first partners
-
-        Returns
-        -------
-        bonded_atoms : list
-            A list with the ID of the bonded atoms
-        """
-        return self.bonded_atoms
     
     def get_valence(self, expand : int = 0) -> int:
         """ Method to compute the valence of an atom

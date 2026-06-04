@@ -1,4 +1,5 @@
 import os                                # To navigate the file system
+from json import load                    # To load the geometries from a JSON file    
 from pandas import read_csv              # To manage tables and databases
 from pathlib import Path                 # To locate files in the file system
 from dataclasses import dataclass, field # To create data classes
@@ -15,6 +16,10 @@ pte_file = os.path.join(here, "data", "PubChemElements_all.csv")
 periodic_data = read_csv(pte_file)
 PERIODIC_TABLE = periodic_data.set_index("Symbol")
 all_symbols = set(PERIODIC_TABLE.index.to_list())
+
+# Load the geometries from the JSON file
+with open(os.path.join(here, "data", "geometries.json"), "r") as f:
+    raw_geometries = load(f)
 
 @dataclass(frozen=True)
 class Element:
@@ -176,6 +181,26 @@ class Element:
             
         return electron_configuration
 
+@dataclass(frozen=True)
+class Geometry:
+    """Class to represent an atomic geometry
+    
+    Attributes
+    ----------
+    char : str
+        A character representing the geometry (e.g. "T" for tetrahedral,
+        "S" for square planar, etc.)
+    geometry : str
+        The name of the geometry (e.g. "Tetrahedral",
+        "Square Planar", etc.)
+    angles : list
+        A list of the ideal bond angles in the geometry
+        (e.g. [109.5] for tetrahedral, [90, 180] for square planar, etc.)
+    """
+    char: str
+    geometry: str
+    angles: tuple
+
 class PeriodicTable(dict):
     """
     Class to represent the periodic table as a frozen dictionary
@@ -218,6 +243,61 @@ class PeriodicTable(dict):
             raise TypeError("PeriodicTable is immutable")
         super().__setattr__(key, value)
 
+class AtomGeometry(dict):
+    """
+    Class to represent the possible atomic geometries as a frozen dictionary
+    
+    The keys are the coordination number and the number of
+    lone electron pairs (e.g. (4, 0) for a tetrahedral geometry,
+    (4, 1) for a seesaw geometry, etc.) and the values are
+    Geometry objects containing the properties of the geometries.
+    """
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        object.__setattr__(self, "_frozen", True)
+    
+    def __setitem__(self, key, value):
+        if getattr(self, "_frozen", False):
+            raise TypeError("AtomGeometry is immutable")
+        super().__setitem__(key, value)
+    
+    def __delitem__(self, key):
+        if getattr(self, "_frozen", False):
+            raise TypeError("AtomGeometry is immutable")
+        super().__delitem__(key)
+    
+    def pop(self, *args, **kwargs):
+        if getattr(self, "_frozen", False):
+            raise TypeError("AtomGeometry is immutable")
+        return super().pop(*args, **kwargs)
+    
+    def clear(self):
+        if getattr(self, "_frozen", False):
+            raise TypeError("AtomGeometry is immutable")
+        super().clear()
+    
+    def update(self, *args, **kwargs):
+        if getattr(self, "_frozen", False):
+            raise TypeError("AtomGeometry is immutable")
+        super().update(*args, **kwargs)
+    
+    def __setattr__(self, key, value):
+        if getattr(self, "_frozen", False):
+            raise TypeError("AtomGeometry is immutable")
+        super().__setattr__(key, value)
+    
+    def __str__(self):
+        output = "-" * 80 + "\n"
+        output += f"| ({'Coordination':^14}, {'Lone Pairs':^12}) | "
+        output += f"{'ID':^5} | {'Geometry':^20} | {'Angles':^12} |\n"
+        output += "-" * 80 + "\n"
+        for (coordination, lone_pairs), geometry in self.items():
+            output += f"| ({coordination:^14}, {lone_pairs:^12}) | "
+            output += f"{geometry.char:^5} | {geometry.geometry:>20} | "
+            output += f"{','.join(str(a) for a in geometry.angles):>12} |\n"
+        output += "-" * 80
+        return output
+
 pre_PTE = {}
 for symbol in all_symbols:
     data = PERIODIC_TABLE.loc[symbol]
@@ -231,9 +311,8 @@ for symbol in all_symbols:
     )
     pre_PTE[symbol] = element
 
-PTE = PeriodicTable(**pre_PTE)
-"""
-This is the periodic table as a frozen dictionary of Element objects.
+PTE = PeriodicTable(pre_PTE)
+"""This is the periodic table as a frozen dictionary of Element objects.
 
 The keys are the element symbols (e.g. "H" for hydrogen,
 "C" for carbon, etc.) and the values are Element objects
@@ -258,6 +337,31 @@ Each Element object contains the following properties:
                     (e.g. [-1, 0, 1] for hydrogen)
 - electron_configuration: The electron configuration of the element
                             as a dictionary (e.g. {"1s": 1} for hydrogen)
+"""
+
+# Create a geometries dictionary
+geometries = {}
+for geom in raw_geometries:
+    for config in geom["configuration"]:
+        key = (config["coordination"], config["lone_pairs"])
+        geometries[key] = Geometry(
+            char=geom["key"],
+            geometry=geom["geometry"],
+            angles=tuple(config["angles"])
+        )
+
+# Create an atom geometries dictionary
+GEOMETRIES = AtomGeometry(geometries)
+"""This is a dictionary of the possible atomic geometries.
+
+The values are Geometry objects containing the properties of the geometries.
+The keys are the coordination number and the number of lone electron pairs
+(e.g. (4, 0) for a tetrahedral geometry).
+
+Each Geometry object contains:
+- char: A character representing the geometry (e.g. "T" for tetrahedral)
+- geometry: The name of the geometry (e.g. "Tetrahedral")
+- angles: The angles of the geometry in degrees (e.g. [109.5, 109.5, 109.5])
 """
 
 if __name__ == "__main__":

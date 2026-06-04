@@ -1,0 +1,145 @@
+[
+    {
+        "geometry" : "linear",
+        "key" : "L",
+        "configuration" : [
+            {
+                "coordination" : 2,
+                "lone_pairs" : 0,
+                "angles" : [180]
+            },
+            {
+                "coordination" : 2,
+                "lone_pairs" : 3,
+                "angles" : [180]
+            },
+            {
+                "coordination" : 2,
+                "lone_pairs" : 4,
+                "angles" : [180]
+            }
+        ]
+    },
+    {
+        "geometry" : "angular",
+        "key" : "A",
+        "configuration" : [
+            {
+                "coordination" : 2,
+                "lone_pairs" : 1,
+                "angles" : [120]
+            },
+            {
+                "coordination" : 2,
+                "lone_pairs" : 2,
+                "angles" : [109.5]
+            }
+        ]
+    },
+    {
+        "geometry" : "trigonal planar",
+        "key" : "R",
+        "configuration" : [
+            {
+                "coordination" : 3,
+                "lone_pairs" : 0,
+                "angles" : [120]
+            }
+        ]
+    },
+    {
+        "geometry" : "trigonal pyramidal",
+        "key" : "P",
+        "configuration" : [
+            {
+                "coordination" : 3,
+                "lone_pairs" : 1,
+                "angles" : [109.5]
+            }
+        ]
+    },
+    {
+        "geometry" : "t-shaped",
+        "key" : "T",
+        "configuration" : [
+            {
+                "coordination" : 3,
+                "lone_pairs" : 2,
+                "angles" : [90, 180]
+            },
+            {
+                "coordination" : 3,
+                "lone_pairs" : 3,
+                "angles" : [90, 180]
+            }
+        ]
+    },
+    {
+        "geometry" : "tetrahedral",
+        "key" : "H",
+        "configuration" : [
+            {
+                "coordination" : 4,
+                "lone_pairs" : 0,
+                "angles" : [109.5]
+            }
+        ]
+    },
+    {
+        "geometry" : "see-saw",
+        "key" : "W",
+        "configuration" : [
+            {
+                "coordination" : 4,
+                "lone_pairs" : 1,
+                "angles" : [90, 180]
+            }
+        ]
+    },
+    {
+        "geometry" : "square planar",
+        "key" : "S",
+        "configuration" : [
+            {
+                "coordination" : 4,
+                "lone_pairs" : 2,
+                "angles" : [90, 180]
+            }
+        ]
+    },
+    {
+        "geometry" : "trigonal bipyramidal",
+        "key" : "B",
+        "configuration" : [
+            {
+                "coordination" : 5,
+                "lone_pairs" : 0,
+                "angles" : [90, 120, 180]
+            }
+        ]
+    },
+    {
+        "geometry" : "square pyramidal",
+        "key" : "Q",
+        "angles" : [90, 180],
+        "configuration" : [
+            {
+                "coordination" : 5,
+                "lone_pairs" : 1,
+                "angles" : [90, 180]
+            }
+        ]
+    },
+    {
+        "geometry" : "octahedral",
+        "key" : "O",
+        "angles" : [90],
+        "configuration" : [
+            {
+                "coordination" : 6,
+                "lone_pairs" : 0,
+                "angles" : [90, 180]
+            }
+        ]
+    }
+]

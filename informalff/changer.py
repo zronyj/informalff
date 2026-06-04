@@ -113,13 +113,13 @@ class Stretch(Changer):
                             .graph
                             .get_branch(self.atom2_idx,
                             self.atom1_idx,
-                            subs.get_num_atoms(),
+                            subs.num_atoms(),
                             []))
         self.branch2_idx = (subs
                             .graph
                             .get_branch(self.atom1_idx,
                             self.atom2_idx,
-                            subs.get_num_atoms(),
+                            subs.num_atoms(),
                             []))
 
     def change(self,
@@ -304,13 +304,13 @@ class Bend(Changer):
                             .graph
                             .get_branch(self.atom2_idx,
                             self.atom1_idx,
-                            subs.get_num_atoms(),
+                            subs.num_atoms(),
                             []))
         self.branch2_idx = (subs
                             .graph
                             .get_branch(self.atom2_idx,
                             self.atom3_idx,
-                            subs.get_num_atoms(),
+                            subs.num_atoms(),
                             []))
 
     def change(self,
