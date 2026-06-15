@@ -100,9 +100,8 @@ class Element:
         if cr != "":
             return cr, vdw
         else:
-            raise ValueError(
-                    "Atom.__get_atomic_radius(): "
-                    f"Atomic radius not found for {self.symbol}")
+            raise ValueError("Atom.__get_atomic_radius(): "
+                             f"Atomic radius not found for {self.symbol}")
 
     def __get_electronegativity(self) -> float:
         """
@@ -139,7 +138,7 @@ class Element:
         if oxs != "":
             # Maybe it is a single oxidation state already
             try:
-                return float(oxs)
+                return [float(oxs)]
             # Maybe not, and we need to split it into a list
             except ValueError:
                 return [int(ox) for ox in oxs.split(",")]
@@ -302,12 +301,12 @@ pre_PTE = {}
 for symbol in all_symbols:
     data = PERIODIC_TABLE.loc[symbol]
     element = Element(
-        symbol=symbol,
-        name=data["Name"],
-        number=data["AtomicNumber"],
-        mass=data["AtomicMass"],
-        ionization_energy=data["IonizationEnergy"],
-        electron_affinity=data["ElectronAffinity"]
+        symbol = symbol,
+        name = data["Name"],
+        number = int(data["AtomicNumber"]),
+        mass = float(data["AtomicMass"]),
+        ionization_energy = float(data["IonizationEnergy"]),
+        electron_affinity = float(data["ElectronAffinity"])
     )
     pre_PTE[symbol] = element
 

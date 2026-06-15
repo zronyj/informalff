@@ -20,12 +20,10 @@ class MolecularGraph:
     graph : dict
         A dictionary with the connectivity of the molecule
     """
-    def __init__(
-            self,
-            atoms : int,
-            bonds : list,
-            force : bool = False
-            ):
+    def __init__(self,
+                 atoms : int,
+                 bonds : list,
+                 force : bool = False):
         """ MolecularGraph constructor method
         
         Parameters
@@ -42,6 +40,8 @@ class MolecularGraph:
         if atoms < 0:
             raise ValueError("MolecularGraph.__init__() The number of atoms"
                              " should be positive!")
+        
+        self.__validate_bonds(bonds)
 
         pre_bonds = []
         for b in bonds:
@@ -62,20 +62,83 @@ class MolecularGraph:
             self.atoms = list(range(atoms))
             self.hidden = []
         
-        self.bonds = bonds
+        self._bonds = bonds
 
+        self.__build_graph()
+    
+    def __build_graph(self):
+        """ Method to build the graph of the molecule """
         # Initialize the dictionary for the graph
-        self.graph = {a : [] for a in self.atoms}
+        self.graph = {a : set([]) for a in self.atoms}
 
         # Iterate over all bonds
-        for b in self.bonds:
-            self.graph[b[0]].append(b[1])
-            self.graph[b[1]].append(b[0])
+        for b in self._bonds:
+            self.graph[b[0]].add(b[1])
+            self.graph[b[1]].add(b[0])
         
         # Iterate over all atoms
         for a in self.atoms:
             # Remove any duplicates
             self.graph[a] = set(sorted(self.graph[a]))
+    
+    def __validate_bonds(self, bonds : list):
+        """ Method to validate the bonds of the molecule
+
+        Parameters
+        ----------
+        bonds : list of tuples
+            A list of pairs of atoms defining the bonds of the molecule
+        """
+        if not isinstance(bonds, list):
+            raise ValueError("MolecularGraph.bonds() The bonds should be "
+                             "a list of tuples!")
+        
+        if not all([isinstance(v, tuple) for v in bonds]):
+            raise ValueError("MolecularGraph.bonds() Each bond should be "
+                             "represented by a tuple!")
+        
+        if not all([len(v) == 2 for v in bonds]):
+            raise ValueError("MolecularGraph.bonds() Each bond should be "
+                             "a pair of atoms!")
+        
+        if not all([isinstance(v[0], int) and isinstance(v[1], int)
+                    for v in bonds]):
+            raise ValueError("MolecularGraph.bonds() Each bond should be "
+                             "a pair of integers!")
+    @property
+    def bonds(self):
+        return self._bonds
+    
+    @bonds.setter
+    def bonds(self, value : list):
+        """ Method to set the bonds of the molecule
+        
+        Parameters
+        ----------
+        value : list of tuples
+            A list of pairs of atoms defining the bonds of the molecule
+        """
+        self.__validate_bonds(value)
+
+        pre_bonds = []
+        for b in value:
+            pre_bonds += b
+
+        pre_bonds = set(pre_bonds)
+        atoms_b = len(pre_bonds)
+        if atoms_b != len(self.atoms):
+            raise ValueError("MolecularGraph.bonds() The number of "
+                             "atoms and the atoms in the bonds do not "
+                             "match!"
+                             f"\nAtoms: {len(self.atoms)}\nBonds: {atoms_b}")
+        
+        if pre_bonds.difference(set(self.atoms)) != set():
+            raise ValueError("MolecularGraph.bonds() The atoms in the bonds "
+                             "are not in the molecule!")
+        
+        self._bonds = value
+
+        self.__build_graph()
 
     def get_neighbors(self,
                       atom : int,
@@ -169,7 +232,7 @@ class MolecularGraph:
                              " should be in the molecule!")
 
         # If no bonds are found, something is wrong
-        if len(self.bonds) == 0:
+        if len(self._bonds) == 0:
             raise ValueError("MolecularGraph.get_branch() No bonds found!")
 
         # Create a list for the next level
@@ -207,7 +270,7 @@ class MolecularGraph:
     
     def _find_rings(self,
                    path : list = [],
-                   rings : list = []) -> list:
+                   rings : list = []) -> tuple:
         """ Method to find the rings in the molecule
         
         Detects if there are rings in the molecule, and
@@ -329,7 +392,7 @@ class MolecularGraph:
                              " should be in the molecule!")
 
         # If no bonds are found, something is wrong
-        if len(self.bonds) == 0:
+        if len(self._bonds) == 0:
             raise ValueError("MolecularGraph.shortest_path() No bonds found!")
 
         # Add the current atom to the path
@@ -397,7 +460,7 @@ class MolecularGraph:
         path : list
             A list of the atoms that are bonded together
             as a molecule."""
-        if len(self.bonds) == 0:
+        if len(self._bonds) == 0:
             warn("MolecularGraph._follow_bonds() No bonds were "
                  "provided! Just the atom will be returned.")
             return [atom]

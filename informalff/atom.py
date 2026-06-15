@@ -88,29 +88,38 @@ class Atom(object):
 
     Attributes
     ----------
+    number : int
+        The atomic number of the atom
     element : str
         The symbol of the element of the current atom.
     coords : ndarray
         NumPy array with the X, Y and Z coordinates as `float`
-    flag : bool
-        A flag to denote if the atom has been selected or not
     charge : float
         The atom's charge
-    radius : float
+    covalent_radius : float
         The atom's covalent radius
     vdw_radius : float
         The atom's van der Waals radius
     mass : float
         The atom's mass
+    electronegativity : float
+        The atom's electronegativity
+    oxidation_states : list
+        The atom's oxidation states
+    electron_configuration : dict
+        The atom's electron configuration, with the orbital as key and the
+        number of electrons in that orbital as value
     bonded_atoms : list
         A list with the ID of the bonded atoms
+    flag : bool
+        A flag to denote if the atom has been selected or not
     """
 
     def __init__(self,
                  element:str = "H",
-                 x : int = 0.0,
-                 y : int = 0.0,
-                 z : int = 0.0,
+                 x : float = 0.0,
+                 y : float = 0.0,
+                 z : float = 0.0,
                  charge : float = 0.0,
                  flag : bool = False):
         """ Atom constructor method
@@ -169,6 +178,7 @@ class Atom(object):
         """
         Update the properties of the atom.
         """
+        self.number = PTE[self._element].number
         self.vdw_radius = PTE[self._element].vdw_radius
         self.covalent_radius = PTE[self._element].covalent_radius
         self.mass = PTE[self._element].mass
@@ -350,7 +360,7 @@ class Atom(object):
         # Create grid
         grid = { 'X':[], 'Y':[], 'Z':[] }
         for s in range(len(shells)):
-            temp_grid = fibonacci_grid_shell(self.get_coordinates(),
+            temp_grid = fibonacci_grid_shell(self.coordinates,
                                              delta_r * s,
                                              shell_dots[s])
             for q in "XYZ":
@@ -358,7 +368,7 @@ class Atom(object):
 
         return grid
     
-    def get_valence(self, expand : int = 0) -> int:
+    def get_valence(self, expand : int = 0) -> tuple:
         """ Method to compute the valence of an atom
 
         Parameters

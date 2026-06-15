@@ -12,7 +12,7 @@ from .bonding import Bonding
 from .chemical_bond import ChemicalBond
 
 BOHR = 1 / (cts.physical_constants["Bohr radius"][0] * 1e10)
-   
+
 # ------------------------------------------------------- #
 #                   The Molecule Class                    #
 # ------------------------------------------------------- #
@@ -276,7 +276,7 @@ class Molecule(object):
                         f"got an array with shape {data[2].shape}"
                 )
             self.atoms[idx].element = data[0]
-            self.atoms[idx].coords = data[1]
+            self.atoms[idx].coordinates = data[1]
         elif isinstance(idx, slice):
             i = idx.start if idx.start != None else 0
             o = idx.stop if idx.stop != None else len(self.atoms)
@@ -307,7 +307,7 @@ class Molecule(object):
                     )
             for jdx, kdx in enumerate(range(i, o, e)):
                 self.atoms[kdx].element = data[jdx][0]
-                self.atoms[kdx].coords = data[jdx][1]
+                self.atoms[kdx].coordinates = data[jdx][1]
         else:
             raise TypeError(
                     f"Molecule.__setitem__() The argument {idx} is not an "
@@ -991,7 +991,7 @@ class Molecule(object):
 
         return chem_bonds.get_bond_types()
 
-    def get_bond_types(self, force : bool = False) -> list:
+    def get_bond_types(self, force : bool = False) -> tuple:
         """ Method to get the bond types of the molecule
 
         This method will get the bond types of the molecule using
@@ -1006,6 +1006,8 @@ class Molecule(object):
         -------
         bonds : list of tuples
             A list of tuples with the bonded atoms and their bond type
+        bond_types : list
+            A list with the bond types
         """
         # Check if the bonds have already been calculated
         if len(self.bonds) == 0 or force:
@@ -1019,6 +1021,8 @@ class Molecule(object):
         for b, o in zip(bond_data["bonds"], bond_data["bond_orders"]):
             self.bonds.append((b[0], b[1]))
             self.bond_types.append(o)
+        
+        self.graph.bonds = self.bonds
 
         return self.bonds, self.bond_types
 
@@ -2059,13 +2063,13 @@ class Molecule(object):
         Ixx = Iyy = Izz = Ixy = Ixz = Iyz = 0.0
 
         for a in shifted_atoms:
-            Ixx += PTE[a[0]].atomic_mass * (a[1][1]**2 + a[1][2]**2)
-            Iyy += PTE[a[0]].atomic_mass * (a[1][0]**2 + a[1][2]**2)
-            Izz += PTE[a[0]].atomic_mass * (a[1][0]**2 + a[1][1]**2)
+            Ixx += PTE[a[0]].mass * (a[1][1]**2 + a[1][2]**2)
+            Iyy += PTE[a[0]].mass * (a[1][0]**2 + a[1][2]**2)
+            Izz += PTE[a[0]].mass * (a[1][0]**2 + a[1][1]**2)
 
-            Ixy += PTE[a[0]].atomic_mass * (a[1][0] * a[1][1])
-            Ixz += PTE[a[0]].atomic_mass * (a[1][0] * a[1][2])
-            Iyz += PTE[a[0]].atomic_mass * (a[1][1] * a[1][2])
+            Ixy += PTE[a[0]].mass * (a[1][0] * a[1][1])
+            Ixz += PTE[a[0]].mass * (a[1][0] * a[1][2])
+            Iyz += PTE[a[0]].mass * (a[1][1] * a[1][2])
         
         inertia_tensor = np.array([
             [ Ixx, -Ixy, -Ixz],
@@ -2140,9 +2144,9 @@ XYZ file of molecule: {self.name} - created by InformalFF
                 num_atoms += 1
                 selected_coords += template.format(
                                             s=a.element,
-                                            x=a.coords[1],
-                                            y=a.coords[2],
-                                            z=a.coords[3])
+                                            x=a.coordinates[1],
+                                            y=a.coordinates[2],
+                                            z=a.coordinates[3])
         
         header = f"""{len(num_atoms)}
 XYZ file of atom selection from molecule: {self.name} - created by InformalFF
