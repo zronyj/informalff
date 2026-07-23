@@ -52,7 +52,7 @@ class MolecularGraph:
         if atoms_b != atoms:
             if force:
                 self.atoms = sorted(list(pre_bonds))
-                self.hidden = list(range(atoms))
+                self.hidden = sorted(list(set(range(atoms)) - pre_bonds))
             else:
                 raise ValueError("MolecularGraph.__init__() The number of "
                                 "atoms and the atoms in the bonds do not "
@@ -93,9 +93,9 @@ class MolecularGraph:
             raise ValueError("MolecularGraph.bonds() The bonds should be "
                              "a list of tuples!")
         
-        if not all([isinstance(v, tuple) for v in bonds]):
+        if not all([isinstance(v, tuple) or isinstance(v, list) for v in bonds]):
             raise ValueError("MolecularGraph.bonds() Each bond should be "
-                             "represented by a tuple!")
+                             "represented by a tuple or a list!")
         
         if not all([len(v) == 2 for v in bonds]):
             raise ValueError("MolecularGraph.bonds() Each bond should be "
@@ -131,10 +131,6 @@ class MolecularGraph:
                              "atoms and the atoms in the bonds do not "
                              "match!"
                              f"\nAtoms: {len(self.atoms)}\nBonds: {atoms_b}")
-        
-        if pre_bonds.difference(set(self.atoms)) != set():
-            raise ValueError("MolecularGraph.bonds() The atoms in the bonds "
-                             "are not in the molecule!")
         
         self._bonds = value
 
@@ -202,7 +198,7 @@ class MolecularGraph:
                    atom1 : int,
                    atom2 : int,
                    depth : int,
-                   path : list = []) -> list:
+                   path : list = None) -> list: # type: ignore
         """ Method to get the molecular branch stemming from two atoms
 
         Parameters
@@ -239,8 +235,8 @@ class MolecularGraph:
         next_level = [a for a in self.get_neighbors(atom2) if a != atom1]
 
         # Add the current atom to the path
-        if len(path) == 0:
-            path.append(atom2)
+        if path is None:
+            path = [atom2]
 
         # If the depth is 0 or if the next level is empty, return emptiness
         if depth == 0 or len(next_level) == 0:
@@ -269,8 +265,8 @@ class MolecularGraph:
         return self.graph
     
     def _find_rings(self,
-                   path : list = [],
-                   rings : list = []) -> tuple:
+                    path : list = None, # type: ignore
+                    rings : list = None) -> tuple: # type: ignore
         """ Method to find the rings in the molecule
         
         Detects if there are rings in the molecule, and
@@ -284,7 +280,7 @@ class MolecularGraph:
             The rings of the molecule as a list"""
         
         # Check if the path is empty
-        if len(path) == 0:
+        if path is None:
             # If it is, start with the first atom
             path = [0]
 
@@ -296,6 +292,10 @@ class MolecularGraph:
             for a in self.get_neighbors(path[-1]):
                 if a != path[-2]:
                     next_level.append(a)
+
+        # Create a list for the rings
+        if rings is None:
+            rings = []
 
         # If there's nothing in the next level, return the path without this
         # last atom
@@ -343,16 +343,20 @@ class MolecularGraph:
         _, rings = self._find_rings([], [])
 
         # Turn the rings into sets
-        sets = [set(r) for r in rings]
+        sets = {str(i) : set(r) for i, r in enumerate(rings)}
+        new_sets = sets.copy()
 
         # Remove sets that are supersets of other sets
-        for s1 in sets:
-            for s2 in sets:
+        for i1, s1 in sets.items():
+            for i2, s2 in sets.items():
                 if s1 != s2 and s1.issubset(s2):
-                    sets.remove(s2)
+                    try:
+                        del new_sets[i2]
+                    except KeyError:
+                        pass
 
         # Small rings only, as lists
-        list_rings = [list(s) for s in sets]
+        list_rings = [list(s) for s in new_sets.values()]
         list_rings.sort()
 
         # Return the rings
@@ -361,7 +365,7 @@ class MolecularGraph:
     def shortest_path(self,
                     atom1 : int,
                     atom2 : int,
-                    path : list = []) -> list:
+                    path : list = None) -> list: # type: ignore
         """Method to find shortest path between two atoms
         
         Method to find the path with the least amount of
@@ -396,8 +400,8 @@ class MolecularGraph:
             raise ValueError("MolecularGraph.shortest_path() No bonds found!")
 
         # Add the current atom to the path
-        if len(path) == 0:
-            path.append(atom1)
+        if path is None:
+            path = [atom1]
 
         # Create a list for the next level
         next_level = [a for a in self.get_neighbors(atom1) if a not in path]
@@ -524,8 +528,9 @@ class MolecularGraph:
             for n in mol_net:
                 if n in reference_pool:
                     continue
-            
-            connectivity.append(mol_net)
-            reference_pool += mol_net
+                else:
+                    connectivity.append(mol_net)
+                    reference_pool += mol_net
+                    break
     
         return connectivity

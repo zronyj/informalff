@@ -54,13 +54,13 @@ def fibonacci_grid_shell(center : np.ndarray,
 
     # Create a dictionary which will hold the coordinates
     # of each grid-point in each dimension
-    grid = { q : [0] * dots for q in 'XYZ' }
+    grid = { q : [0] * dots for q in 'xyz' }
 
     # Fill in the coordinates of the grid as X, Y and Z
     for i in range ( 0, dots ) :
-        grid['X'][i] = pr[i] * np.sin(phi[i]) + center[0]
-        grid['Y'][i] = pr[i] * np.cos(phi[i]) + center[1]
-        grid['Z'][i] = radius * zeta[i] + center[2]
+        grid['x'][i] = pr[i] * np.sin(phi[i]) + center[0]
+        grid['y'][i] = pr[i] * np.cos(phi[i]) + center[1]
+        grid['z'][i] = radius * zeta[i] + center[2]
     
     return grid
 
@@ -92,7 +92,7 @@ class Atom(object):
         The atomic number of the atom
     element : str
         The symbol of the element of the current atom.
-    coords : ndarray
+    coordinates : ndarray
         NumPy array with the X, Y and Z coordinates as `float`
     charge : float
         The atom's charge
@@ -208,14 +208,14 @@ class Atom(object):
         
         Raises
         ------
-        TypeError
+        ValueError
             If the element symbol does not correspond to any element
             in the Periodic Table
         """
         if element in all_symbols:
             self._element = element
         else:
-            raise TypeError((f"Atom.element.setter() The symbol {element} "
+            raise ValueError((f"Atom.element.setter() The symbol {element} "
                 "does not correspond to any element in the Periodic Table."))
         
         self._update_properties()
@@ -279,14 +279,6 @@ class Atom(object):
                     raise TypeError("Atom.coordinates.setter(): "
                                     "Coordinates must be a NumPy vector, "
                                     "a list or a tuple.")
-        elif len(args) == 3:
-            if isinstance(args[0], float) and \
-                isinstance(args[1], float) and \
-                isinstance(args[2], float):
-                coords = np.array([args[0], args[1], args[2]])
-            else:
-                raise TypeError("Atom.coordinates.setter(): "
-                                "Coordinates must be 3 float entries.")
         else:
             raise TypeError("Atom.coordinates.setter(): "
                             "Coordinates must be one 3D NumPy vector, "
@@ -358,12 +350,12 @@ class Atom(object):
             for d in range(1, delta_dots+1):
                 shell_dots[- d] -= 1
         # Create grid
-        grid = { 'X':[], 'Y':[], 'Z':[] }
+        grid = { 'x':[], 'y':[], 'z':[] }
         for s in range(len(shells)):
             temp_grid = fibonacci_grid_shell(self.coordinates,
                                              delta_r * s,
                                              shell_dots[s])
-            for q in "XYZ":
+            for q in "xyz":
                 grid[q] = grid[q] + temp_grid[q]
 
         return grid

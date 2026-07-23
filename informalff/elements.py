@@ -1,4 +1,5 @@
 import os                                # To navigate the file system
+from numpy import nan                    # To handle missing values
 from json import load                    # To load the geometries from a JSON file    
 from pandas import read_csv              # To manage tables and databases
 from pathlib import Path                 # To locate files in the file system
@@ -14,6 +15,7 @@ from dataclasses import dataclass, field # To create data classes
 here = Path(globals().get("__file__", "./_")).absolute().parent
 pte_file = os.path.join(here, "data", "PubChemElements_all.csv")
 periodic_data = read_csv(pte_file)
+periodic_data.replace(nan, "", inplace=True)
 PERIODIC_TABLE = periodic_data.set_index("Symbol")
 all_symbols = set(PERIODIC_TABLE.index.to_list())
 
@@ -31,9 +33,9 @@ class Element:
         The symbol of the element (e.g. "H" for hydrogen, "C" for carbon, etc.)
     name : str
         The name of the element (e.g. "Hydrogen", "Carbon", etc.)
-    atomic_number : int
+    number : int
         The atomic number of the element (e.g. 1 for hydrogen, 6 for carbon, etc.)
-    atomic_mass : float
+    mass : float
         The atomic mass of the element (e.g. 1.008 for hydrogen, 12.011 for carbon, etc.)
     covalent_radius : float
         The covalent radius of the element in Ångstroms (e.g. 0.31 for hydrogen, 0.76 for carbon, etc.)
@@ -138,7 +140,7 @@ class Element:
         if oxs != "":
             # Maybe it is a single oxidation state already
             try:
-                return [float(oxs)]
+                return [int(oxs)]
             # Maybe not, and we need to split it into a list
             except ValueError:
                 return [int(ox) for ox in oxs.split(",")]
@@ -155,6 +157,9 @@ class Element:
         electron_configuration : dict
             Electron configuration of the element.
         """
+        # Possible shells
+        shells = 'spdfg'
+
         # Get the electron configuration of the element
         ec = PERIODIC_TABLE.loc[self.symbol, "ElectronConfiguration"]
 
@@ -176,7 +181,13 @@ class Element:
         # and the number of electrons as values
         electron_configuration = {}
         for orb_type in orb_types:
-            electron_configuration[orb_type] = int(orb_type[-1])
+            for shell in shells:
+                if shell in orb_type:
+                    # Add the orbital type and the number of electrons
+                    num_shell, num_electrons = orb_type.split(shell)
+                    subshell = num_shell + shell
+                    electron_configuration[subshell] = int(num_electrons)
+                    break
             
         return electron_configuration
 
@@ -192,9 +203,9 @@ class Geometry:
     geometry : str
         The name of the geometry (e.g. "Tetrahedral",
         "Square Planar", etc.)
-    angles : list
-        A list of the ideal bond angles in the geometry
-        (e.g. [109.5] for tetrahedral, [90, 180] for square planar, etc.)
+    angles : tuple
+        A tuple of the ideal bond angles in the geometry
+        (e.g. (109.5,) for tetrahedral, (90, 180) for square planar, etc.)
     """
     char: str
     geometry: str
@@ -351,7 +362,7 @@ for geom in raw_geometries:
 
 # Create an atom geometries dictionary
 GEOMETRIES = AtomGeometry(geometries)
-"""This is a dictionary of the possible atomic geometries.
+"""This is a frozen dictionary of the possible atomic geometries.
 
 The values are Geometry objects containing the properties of the geometries.
 The keys are the coordination number and the number of lone electron pairs
