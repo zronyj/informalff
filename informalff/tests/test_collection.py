@@ -157,12 +157,12 @@ def test_collection_get_limits_edges(water_box):
 
     precision = 0.25
 
-    assert pytest.approx(limits["X"][0], precision) == -10.0
-    assert pytest.approx(limits["X"][1], precision) ==  10.0
-    assert pytest.approx(limits["Y"][0], precision) == -10.0
-    assert pytest.approx(limits["Y"][1], precision) ==  10.0
-    assert pytest.approx(limits["Z"][0], precision) == -10.0
-    assert pytest.approx(limits["Z"][1], precision) ==  10.0
+    assert pytest.approx(limits["x"][0], precision) == -10.0
+    assert pytest.approx(limits["x"][1], precision) ==  10.0
+    assert pytest.approx(limits["y"][0], precision) == -10.0
+    assert pytest.approx(limits["y"][1], precision) ==  10.0
+    assert pytest.approx(limits["z"][0], precision) == -10.0
+    assert pytest.approx(limits["z"][1], precision) ==  10.0
 
 def test_collection_get_limits_factor(water_box):
 
@@ -176,12 +176,12 @@ def test_collection_get_limits_factor(water_box):
 
     precision = 0.2
 
-    assert pytest.approx(limits["X"][0], precision) == -10.0
-    assert pytest.approx(limits["X"][1], precision) ==  10.0
-    assert pytest.approx(limits["Y"][0], precision) == -10.0
-    assert pytest.approx(limits["Y"][1], precision) ==  10.0
-    assert pytest.approx(limits["Z"][0], precision) == -10.0
-    assert pytest.approx(limits["Z"][1], precision) ==  10.0
+    assert pytest.approx(limits["x"][0], precision) == -10.0
+    assert pytest.approx(limits["x"][1], precision) ==  10.0
+    assert pytest.approx(limits["y"][0], precision) == -10.0
+    assert pytest.approx(limits["y"][1], precision) ==  10.0
+    assert pytest.approx(limits["z"][0], precision) == -10.0
+    assert pytest.approx(limits["z"][1], precision) ==  10.0
 
 def test_collection_get_limits_scan(water_box):
 
@@ -195,9 +195,9 @@ def test_collection_get_limits_scan(water_box):
 
     precision = 0.175
 
-    assert pytest.approx(limits["X"][0], precision) == -10.0
-    assert pytest.approx(limits["X"][1], precision) ==  10.0
-    assert pytest.approx(limits["Y"][0], precision) == -10.0
-    assert pytest.approx(limits["Y"][1], precision) ==  10.0
-    assert pytest.approx(limits["Z"][0], precision) == -10.0
-    assert pytest.approx(limits["Z"][1], precision) ==  10.0
+    assert pytest.approx(limits["x"][0], precision) == -10.0
+    assert pytest.approx(limits["x"][1], precision) ==  10.0
+    assert pytest.approx(limits["y"][0], precision) == -10.0
+    assert pytest.approx(limits["y"][1], precision) ==  10.0
+    assert pytest.approx(limits["z"][0], precision) == -10.0
+    assert pytest.approx(limits["z"][1], precision) ==  10.0

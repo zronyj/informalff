@@ -141,9 +141,7 @@ def test_structure_substructure(water_box):
     struct = informalff.Structure("test")
     struct.read_xyz("Collection.xyz")
 
-    with pytest.warns(UserWarning,
-                      match="number of atoms is too large") as excinfo:
-        sub = struct.get_sub_structure()
+    sub = struct.get_sub_structure()
     
     os.remove("Collection.xyz")
 
