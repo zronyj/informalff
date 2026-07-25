@@ -1,6 +1,8 @@
 import numpy as np
 from warnings import warn
+from itertools import product
 from multiprocessing import Pool, cpu_count
+from scipy.spatial.distance import cdist
 
 from .elements import PTE
 
@@ -21,8 +23,8 @@ class Bonding:
         List of atom elements
     __coords : list
         List of atom coordinates
-    __radii : list
-        List of atom radii
+    __radii : dict
+        Dictionary of atom radii
     __bonds : list
         List of bonds
     __tolerance : float
@@ -37,27 +39,7 @@ class Bonding:
     __verbose : bool
         Verbose flag
     """
-    ADDRESSES = [
-        ( 0,  0,  0),
-        ( 1,  1,  1),
-        (-1, -1, -1),
-
-        ( 1,  0,  0),    (-1,  0,  0),
-        ( 0,  1,  0),    ( 0, -1,  0),
-        ( 0,  0,  1),    ( 0,  0, -1),
-
-        ( 1,  1,  0),    (-1, -1,  0),
-        ( 1,  0,  1),    (-1,  0, -1),
-        ( 0,  1,  1),    ( 0, -1, -1),
-
-        ( 1, -1,  0),    (-1,  1,  0),
-        ( 1,  0, -1),    (-1,  0,  1),
-        ( 0,  1, -1),    ( 0, -1,  1),
-        
-        ( 1,  1, -1),    (-1, -1,  1),
-        ( 1, -1,  1),    (-1,  1, -1),
-        (-1,  1,  1),    ( 1, -1, -1)
-    ]
+    ADDRESSES = list(product([-1, 0, 1], repeat=3))
 
     def __init__(self,
                  atoms : list,
@@ -88,27 +70,30 @@ class Bonding:
 
         self.__elements = []
         self.__coords = []
-        self.__radii = []
+        self.__radii = {}
         self.__bonds = []
         self.__tolerance = bond_tolerance
         self.__cube_tolerance = box_tolerance
         self.__multi = multiplicative
         self.__verbose = verbose
 
+        if len(atoms) == 0:
+            raise ValueError("Bonding.__init__(): No atoms provided.")
+
         for atom in atoms:
             self.__elements.append(atom.element)
             self.__coords.append(atom.coordinates)
-            self.__radii.append(atom.covalent_radius)
+            self.__radii[atom.element] = atom.covalent_radius
         
         self.__cube_size = self.__get_cube_size()
-        self.__sq_d = self.__get_possible_distances()
+        self.__pair_distance = self.__get_possible_distances()
 
         if self.__verbose:
             print(f"Initialized Bonding object with {len(atoms)} atoms.")
             print(f"Cube size: {self.__cube_size:.2f} Å")
             print("Possible distances:")
-            for pair, dist in self.__sq_d.items():
-                print(f"  {pair}: {np.sqrt(dist):.2f} Å")
+            for pair, dist in self.__pair_distance.items():
+                print(f"  {pair}: {dist:.2f} Å")
         
     def __get_cube_size(self):
         """ Method to get the cube size
@@ -118,25 +103,24 @@ class Bonding:
         cube_size : float
             The cube size
         """
-        return max(self.__radii) * 2 + self.__cube_tolerance
+        return max(self.__radii.values()) * 2 + self.__cube_tolerance
 
     def __get_possible_distances(self):
-        """ Method to get the possible squared distances between atoms
+        """ Method to get the possible distances between atoms
         
-        This method computes the possible squared distances between atoms
-        based on their radii and the provided tolerance. The idea is to create
-        a dictionary of possible squared distances for each pair of elements,
+        This method computes the possible distances between atoms based
+        on their radii and the provided tolerance. The idea is to create
+        a dictionary of possible distances for each pair of elements,
         which can be used to quickly check if two atoms are bonded based on
         their distance.
 
         Returns
         -------
         possible_distances : dict
-            A dictionary with the possible squared distances between atoms
+            A dictionary with the possible distances between atoms
         """
         # Get the unique elements and their radii
         elements = set(self.__elements)
-        radii = {e : PTE[e].covalent_radius for e in elements}
 
         # Compute the possible distances
         possible_distances = {}
@@ -147,7 +131,7 @@ class Bonding:
                 # Sort the pair of elements to avoid duplicates
                 i, j = sorted((e1, e2))
                 if (i, j) not in possible_distances:
-                    distance = radii[i] + radii[j]
+                    distance = self.__radii[i] + self.__radii[j]
 
                     # If the tolerance is multiplicative, multiply the
                     # distance by the tolerance. Otherwise, add the
@@ -157,8 +141,8 @@ class Bonding:
                     else:
                         distance += self.__tolerance
 
-                    # Add the squared distance to the dictionary
-                    possible_distances[(i, j)] = distance**2
+                    # Add the distance to the dictionary
+                    possible_distances[(i, j)] = distance
 
         return possible_distances
     
@@ -248,9 +232,16 @@ class Bonding:
         # Initialize the list of bonds
         bonds = []
 
+        # Get the coordinates of the atoms as NumPy arrays
+        coords1 = np.array([self.__coords[i] for i in atoms1])
+        coords2 = np.array([self.__coords[j] for j in atoms2])
+
+        # Compute the distances between the two sets of atoms
+        distances = cdist(coords1, coords2, metric='euclidean')
+
         # Iterate over all pairs of atoms
-        for i in atoms1:
-            for j in atoms2:
+        for idi, i in enumerate(atoms1):
+            for idj, j in enumerate(atoms2):
 
                 # Check if the atoms are the same
                 if i == j:
@@ -260,29 +251,19 @@ class Bonding:
                 e1, e2 = self.__elements[i], self.__elements[j]
                 pair = tuple(sorted((e1, e2)))
                 
-                # Compute the squared distance
-                vector = self.__coords[i] - self.__coords[j]
-                sq_distance = np.dot(vector, vector)
-
                 # Check if the atoms are bonded
-                if sq_distance <= self.__sq_d[pair]:
+                if distances[idi, idj] <= self.__pair_distance[pair]:
                     bonds.append(tuple(sorted([i, j])))
         
         return bonds
     
-    def distance_matrix(self, n_cpus : int = cpu_count()) -> tuple:
+    def distance_matrix(self) -> tuple[np.ndarray, list]:
         """ Method to compute the distance matrix
 
         This method computes the distance matrix between all pairs of atoms
         and determines the bonds based on the possible distances. The distance
         matrix is return as a NumPy array, and the bonds are also returned as
         a list of tuples.
-
-        Parameters
-        ----------
-        n_cpus : int
-            The number of CPUs to use for parallel computation.
-            Default is the number of CPUs available on the system.
 
         Returns
         -------
@@ -304,76 +285,35 @@ class Bonding:
                             "provided.")
 
         # Check if there are too many atoms
-        if num_atoms > 1000:
+        if num_atoms > 15000:
             raise ValueError("Bonding.distance_matrix() The number of atoms "
                              "is too large to compute the distance matrix. "
                              "Consider using a more efficient method for "
-                             "systems over 1000 atoms.")
+                             "systems over 15000 atoms.")
+
+        # Initialize the list of bonds
+        self.__bonds = []
 
         # Check if there is only one atom
         if num_atoms == 1:
-            return np.zeros((1, 1)), []
+            return np.zeros((1, 1)), self.__bonds
         
-        # Check if thenumber of atoms is still manageable
-        if num_atoms <= 200:
+        # Get the coordinates as a NumPy array
+        coords = np.array(self.__coords)
 
-            # Initialize the distance matrix with zeros
-            dist_mat = np.zeros((num_atoms, num_atoms))
+        # Initialize the distance matrix with zeros
+        dist_mat = cdist(coords, coords, metric='euclidean')
 
-            # Iterate over all pairs of atoms
-            for i in range(num_atoms):
-                for j in range(i + 1, num_atoms):
+        # Iterate over all pairs of atoms
+        for i in range(num_atoms):
+            for j in range(i + 1, num_atoms):
 
-                    # Get the elements and coordinates of the atoms
-                    e1, e2 = self.__elements[i], self.__elements[j]
-                    pair = tuple(sorted((e1, e2)))
-                    vector = self.__coords[i] - self.__coords[j]
-
-                    # Compute the squared distance
-                    sq_distance = np.dot(vector, vector)
-                    dist_mat[i][j] = dist_mat[j][i] = np.sqrt(sq_distance)
-
-                    # Check if the atoms are bonded
-                    if sq_distance <= self.__sq_d[pair]:
-                        self.__bonds.append(tuple(sorted([i, j])))
-        
-        else:
-
-            warn("Bonding.distance_matrix() The number of atoms "
-                 "is over 200. It may take some time to compute the "
-                 "distance matrix. Attempting to run in parallel ...\n"
-                 "Consider using a more efficient method for "
-                 "large systems.")
-            
-            # Positions in the distance matrix to fill
-            positions = [(i, j) for i in range(num_atoms)
-                                for j in range(i + 1, num_atoms)]
-            
-            # Define a worker function to compute the distance between the
-            # two atoms
-            global worker
-            def worker(pos):
-                i, j = pos
+                # Get the elements and coordinates of the atoms
                 e1, e2 = self.__elements[i], self.__elements[j]
                 pair = tuple(sorted((e1, e2)))
-                vector = self.__coords[i] - self.__coords[j]
-                sq_distance = np.dot(vector, vector)
-                distance = np.sqrt(sq_distance)
-                bond = sq_distance <= self.__sq_d[pair]
-                return (pos, distance, bond)
-            
-            # Run the worker function in parallel
-            with Pool(processes=n_cpus) as p:
-                results = list(p.map(worker, positions))
 
-            # Initialize the distance matrix with zeros
-            dist_mat = np.zeros((num_atoms, num_atoms))
-
-            # Iterate over the results
-            for pos, distance, bond in results:
-                i, j = pos
-                dist_mat[i][j] = dist_mat[j][i] = distance
-                if bond:
+                # Check if the atoms are bonded
+                if dist_mat[i][j] <= self.__pair_distance[pair]:
                     self.__bonds.append(tuple(sorted([i, j])))
         
         if self.__verbose:

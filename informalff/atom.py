@@ -407,7 +407,7 @@ class Atom(object):
         for ke, ve in self.electron_configuration.items():
             all_valence_electrons += ve
             if "s" in ke:
-                shell = ke[:-1]
+                shell = ke
 
         # Calculate how many electrons I can put in this shell
         valence_orbital_capacity = 0

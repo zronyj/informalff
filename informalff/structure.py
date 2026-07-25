@@ -31,15 +31,19 @@ class Structure:
         file_name : str
             Name of the XYZ file with the molecular coordinates.
         """
-        # Empty the structure's atoms
+        # Empty the structure's atoms, bonds, and distance matrix
         self.atoms = []
+        self.bonds = []
+        self.dist_mat = None
 
         # Open the XYZ file and read the contents
         with open(file_name, 'r') as f:
             data = f.readlines()
 
-        # Add atom by atom to the this object
+        # Add atom by atom to this object, skipping blank lines
         for a in data[2:]:
+            if not a.strip():
+                continue
             temp = a.split()
             temp = [float(c) if i != 0 else c for i, c in enumerate(temp)]
             self.atoms.append(Atom(*temp))
@@ -60,44 +64,38 @@ class Structure:
         Parameters
         ----------
         *atoms : Atom or list
-            A `list` with all the Atom objects to be added to the
+            A list with all the Atom objects to be added to the
             Structure object.
+        
+        Raises
+        ------
+        TypeError
+            - If the added object is not an instance of Atom.
+            - If the added object is empty.
+            - If the list of atoms is empty after unpacking.
         """
-        # Check if the provided list is empty
+        # Check if no arguments were provided
         if len(atoms) == 0:
             raise TypeError("Structure.add_atoms() The added object is empty.")
 
-        # If the provided list has only one element
-        if len(atoms) == 1:
+        # If a single list argument was passed
+        if len(atoms) == 1 and isinstance(atoms[0], list):
+            atoms = atoms[0]
 
-            # Check if the provided element is a list
-            if isinstance(atoms[0], list):
-                for a in atoms[0]:
-                    # Check if it's an instance of Atom
-                    if not isinstance(a, Atom):
-                        raise TypeError("Structure.add_atoms() The added object is"
-                                        " not an instance of Atom.")
-                    # Add it to the structure
-                    self.atoms.append(a)
+        # Check if the list of atoms is empty after unpacking
+        if len(atoms) == 0:
+            raise TypeError("Structure.add_atoms() The added object is empty.")
 
-            # Check if it's an instance of Atom
-            elif isinstance(atoms[0], Atom):
-                # Add it to the structure
-                self.atoms.append(atoms[0])
-            
-            else:
-                raise TypeError("Structure.add_atoms() The added object is not"
-                                f" an instance of Atom: {type(atoms[0])}")
+        # Iterate over all provided atoms and validate type
+        for a in atoms:
+            if not isinstance(a, Atom):
+                raise TypeError("Structure.add_atoms() The added object is not "
+                                f"an instance of Atom: {type(a)}")
+            self.atoms.append(a)
 
-        # Iterate over all the provided atoms
-        else:
-            for a in atoms:
-                # Check if it's an instance of Atom
-                if not isinstance(a, Atom):
-                    raise TypeError("Structure.add_atoms() The added object is"
-                                    " not an instance of Atom.")
-                # Add it to the structure
-                self.atoms.append(a)
+        # Invalidate calculated bonds and distance matrix
+        self.bonds = []
+        self.dist_mat = None
     
     def distance_matrix(
             self,
@@ -117,7 +115,9 @@ class Structure:
             The tolerance for the box dimensions. The default value is 0.5 Å.
         """
         # Initialize the bonding object
-        bonding = Bonding(self.atoms, box_tol, bond_tol)
+        bonding = Bonding(atoms=self.atoms,
+                         bond_tolerance=bond_tol,
+                         box_tolerance=box_tol)
 
         # Get the distance matrix
         try:
@@ -135,7 +135,7 @@ class Structure:
         """ Method to get the sub-structures of the given structure
 
         This means, it will return a Molecule or a Collection object.
-        If the connecitivity list has more than one element,
+        If the connectivity list has more than one element,
         then it's a collection. However, if it has one element,
         it may be a molecule, or an atom.
 
@@ -151,10 +151,11 @@ class Structure:
         sub_structure : Molecule | Collection
             An object representing the system being handled.
         """
-        sub_structure = None
+        if len(self.atoms) == 0:
+            raise ValueError("Structure.get_sub_structure() No atoms present in structure!")
 
-        # Check if there are any bonds
-        if len(self.bonds) == 0:
+        # Check if bonds/distance_matrix need to be calculated
+        if self.dist_mat is None and len(self.bonds) == 0:
             self.distance_matrix()
 
         # Get the connectivity
@@ -162,9 +163,8 @@ class Structure:
         sub_graphs = graph.get_connectivity()
 
         # Check if there are any substructures
-        # If not, then there's a problem
         if len(sub_graphs) == 0:
-            raise ValueError("Structure.get_connectivity() No substructures "
+            raise ValueError("Structure.get_sub_structure() No substructures "
                              "were found! Check your inputs!")
         # If there's only one substructure, then it's a molecule
         elif len(sub_graphs) == 1:
@@ -178,7 +178,7 @@ class Structure:
                 temp_mol = Molecule(f"mol_{i}")
                 for ai in sg:
                     temp_mol.add_atoms(self.atoms[ai])
-                # temp_mol.get_bonds(True)
+                temp_mol.get_bonds(True)
                 sub_structure.add_molecule(f"mol_{i}", temp_mol)
         
         return sub_structure

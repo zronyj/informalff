@@ -198,7 +198,7 @@ class ChemicalBond:
                          valence_electrons : np.ndarray,
                          lone_pairs : np.ndarray,
                          mat : np.ndarray,
-                         imat : np.ndarray) -> np.ndarray:
+                         imat : np.ndarray) -> list:
         
         # Generate the template of all possible expansions
         pre_configs = []
@@ -512,10 +512,14 @@ class ChemicalBond:
                 bond_orders = all_bond_orders[0]
             else:
                 if allow_multiconfig:
-                    multi = []
+                    multi = {"bonds": [],
+                             "bond_orders": [],
+                             "valence_electrons": valence_electrons,
+                             "lone_pairs": lone_pairs}
                     for bo in all_bond_orders:
                         new_bonds, new_bond_orders = self.__clean_bond_orders(bo)
-                        multi.append((new_bonds, new_bond_orders))
+                        multi["bonds"].append(new_bonds)
+                        multi["bond_orders"].append(new_bond_orders)
                     return multi
                 
                 else:

@@ -64,7 +64,7 @@ class Molecule(object):
         self.angles = []
         self.dihedrals = []
         self.torsions = []
-        self.charge = 0.0
+        self.charge = 0
         self.volume = 0.0
         self.graph = None
 
@@ -170,7 +170,7 @@ class Molecule(object):
                              "atoms to be removed.")
         # Check if all the provided atom indices are within range
         for w in atoms:
-            if (w < 1) or (w > self.num_atoms()):
+            if (w < 0) or (w >= self.num_atoms()):
                 raise ValueError("Molecule.remove_atoms() The provided "
                                  f"atom index {w} is out of range!")
         
@@ -273,7 +273,7 @@ class Molecule(object):
             if len(data[1]) != 3:
                 raise ValueError(
                         "Molecule.__setitem__() Expected a 3D vector, "
-                        f"got an array with shape {data[2].shape}"
+                        f"got an array with shape {data[1].shape}"
                 )
             self.atoms[idx].element = data[0]
             self.atoms[idx].coordinates = data[1]
@@ -294,7 +294,7 @@ class Molecule(object):
                             f"symbol and the 3D coordinates, got {data}"
                     )
                 if not isinstance(data[jdx][0], str) or \
-                    not isinstance(data[jdx][2], np.ndarray):
+                    not isinstance(data[jdx][1], np.ndarray):
                     raise TypeError(
                             f"Molecule.__setitem__() The item {jdx}: "
                             f"{data[jdx]} is not shaped as a list of str "
@@ -386,7 +386,7 @@ class Molecule(object):
 
     @property
     @lru_cache(maxsize=1)
-    def mol_weight(self) -> bool:
+    def mol_weight(self) -> float:
         """ Method to get the Molecule's mass
 
         Will compute the molecule's mass using the periodic table
@@ -403,12 +403,12 @@ class Molecule(object):
 
         return self._mol_weight
     
-    def get_formula(self) -> str:
+    def get_formula(self) -> dict:
         """ Method to get the molecule's formula
 
         Returns
         -------
-        str
+        dict
             The formula of the molecule
         """
         # Initialize a dictionary to count the number of atoms of each element
@@ -569,7 +569,7 @@ class Molecule(object):
         # Set the volume
         self.volume = np.round(np.mean(mol_vols), 3)
 
-        return self.volume
+        return float(self.volume)
     
     def _set_bonded_atoms(self, force : bool = False) -> None:
         """ Method to set the bonded atoms of the molecule to its atoms
@@ -602,6 +602,11 @@ class Molecule(object):
         -------
         skeleton : list or dict
             Tree graph with with the atomic symbols
+        
+        Raises
+        ------
+        TypeError
+            If the provided skeleton is not a list or a dictionary
         """
         # If the skeleton is a list
         if isinstance(skeleton, list):
@@ -618,14 +623,18 @@ class Molecule(object):
                         atom_graph.append({key : self._graph_to_atoms(v)})
 
         # If the skeleton is a dictionary
-        else:
+        elif isinstance(skeleton, dict):
             atom_graph = {}
 
             # Dictionaries only have lists as values
             # therefore, no check is required
-            for k, v in skeleton:
+            for k, v in skeleton.items():
                 key = self.atoms[k].element
                 atom_graph[key] = self._graph_to_atoms(v)
+
+        else:
+            raise TypeError("Molecule._graph_to_atoms() The provided "
+                            "skeleton is not a list or a dictionary!")
 
         return atom_graph
     
@@ -727,7 +736,7 @@ class Molecule(object):
     def _atom_neighborhood(self,
                            atom_idx : int,
                            depth : int = 1,
-                           ignore : int = None) -> str:
+                           ignore : int = None) -> dict:
         """ Method to get details about the  neighbohood of the given atom
 
         Parameters
@@ -894,7 +903,7 @@ class Molecule(object):
     
     def atomic_details(self,
                        angle_tolerance : float = 0.2,
-                       nth_neighbors : int = 1) -> dict:
+                       nth_neighbors : int = 1) -> list:
         """ Method to get details about the atoms in the molecule
 
         Parameters
@@ -907,15 +916,15 @@ class Molecule(object):
 
         Returns
         -------
-        details : dict
-            Dictionary containing the details of the atom
+        details : list of dict
+            List of dictionaries containing the details of each atom
         """
         # Compute the bond types if they haven't been computed yet
         if len(self.bond_types) == 0:
             self.get_bond_types()
         
         # Get the molecule's electronic distribution
-        chem_bonds = self._compute_elecron_distribution()
+        chem_bonds = self._compute_electron_distribution()
     
         # Get the geometric details of the atom
         details = []
@@ -965,7 +974,7 @@ class Molecule(object):
 
         return False
     
-    def _compute_elecron_distribution(self, force : bool = False) -> dict:
+    def _compute_electron_distribution(self, force : bool = False) -> dict:
         """ Method to compute the bond structure of the molecule
 
         This method will compute the bond structure of the molecule,
@@ -1014,7 +1023,7 @@ class Molecule(object):
             self.get_bonds()
         
         # Get the information on the electrons of each atom in the molecule
-        bond_data = self._compute_elecron_distribution()  # Pack everything nicely
+        bond_data = self._compute_electron_distribution()  # Pack everything nicely
         self.bonds = []
         self.bond_types = []
 
@@ -1026,7 +1035,8 @@ class Molecule(object):
 
         return self.bonds, self.bond_types
 
-    def get_distance_matrix(self, tolerance : float = 0.2,
+    def get_distance_matrix(self,
+                            tolerance : float = 0.2,
                             force : bool = False) -> np.ndarray:
         """ Method to get the distances between pairs of atoms
 
@@ -1231,7 +1241,7 @@ class Molecule(object):
         rings = self.graph.get_rings()
 
         # Get the bond types of the molecule
-        if len(self.bond_type) == 0:
+        if len(self.bond_types) == 0:
             _, orders = self.get_bond_types()
         
         b_orders = dict(zip(self.bonds, orders))
@@ -1253,12 +1263,15 @@ class Molecule(object):
             if temp not in potential and order == 1.0:
 
                 # If torsions in rings are to be excluded ...
-                if no_rings:
 
-                    # Iterate over all rings in the molecule
-                    for r in rings:
-                        if temp[0] in r and temp[1] in r:
-                            continue
+                # ... check if the bond is part of any ring
+                bond_in_ring = []
+                for r in rings:
+                    bond_in_ring.append(temp[0] in r and temp[1] in r)
+
+                # ... and if it is, skip the dihedral
+                if no_rings and any(bond_in_ring):
+                    continue
                 
                 # Add the dihedral to the list
                 potential.append(temp)
@@ -1444,16 +1457,17 @@ class Molecule(object):
 
         # Iterate over all atoms in the molecule ...
         for a in self.atoms:
-            # Extract the atomic coordinates
-            position = a.coordinates
-            # Compute the new coordinates
-            new_coords = r.as_matrix() @ position
-            # Set the new coordinates
-            a.coordinates = {
-                "x" : new_coords[0],
-                "y" : new_coords[1],
-                "z" : new_coords[2]
-            }
+            if a.flag:
+                # Extract the atomic coordinates
+                position = a.coordinates
+                # Compute the new coordinates
+                new_coords = r.as_matrix() @ position
+                # Set the new coordinates
+                a.coordinates = {
+                    "x" : new_coords[0],
+                    "y" : new_coords[1],
+                    "z" : new_coords[2]
+                }
         
         self.move_molecule(mol_center)
     
@@ -1492,16 +1506,17 @@ class Molecule(object):
 
         # Iterate over all atoms in the molecule ...
         for a in self.atoms:
-            # Extract the atomic coordinates
-            position = a.coordinates
-            # Compute the new coordinates
-            new_coords = rotation_matrix @ position
-            # Set the new coordinates
-            a.coordinates = {
-                "x" : new_coords[0],
-                "y" : new_coords[1],
-                "z" : new_coords[2]
-            }
+            if a.flag:
+                # Extract the atomic coordinates
+                position = a.coordinates
+                # Compute the new coordinates
+                new_coords = rotation_matrix @ position
+                # Set the new coordinates
+                a.coordinates = {
+                    "x" : new_coords[0],
+                    "y" : new_coords[1],
+                    "z" : new_coords[2]
+                }
         
         self.move_molecule(mol_center)
 
@@ -1835,7 +1850,7 @@ class Molecule(object):
         # Get coordinates of atom 2
         v2 = self.atoms[a2].coordinates
 
-        return np.linalg.norm(v2 - v1)
+        return float(np.linalg.norm(v2 - v1))
 
     def get_angle(self, a1 : int, a2 : int, a3 : int) -> float:
         """ Method to get interatomic angle
@@ -1870,7 +1885,9 @@ class Molecule(object):
         d2 /= np.linalg.norm(d2)
 
         # Compute the angle
-        angle = np.arccos( np.dot(d1,d2) )
+        # Floating point inaccuracy in np.dot can yield values
+        # slightly outside [-1.0, 1.0]
+        angle = np.arccos(np.clip(np.dot(d1, d2), -1.0, 1.0))
 
         # In degrees
         angle *= 180/np.pi
@@ -1988,10 +2005,10 @@ class Molecule(object):
         # Iterate over all atoms
         for i, atom in enumerate(self.atoms):
             dist = atom.coordinates - COM            # Compute distance for atom
-            distances.append([i, atom.element, np.linalg.norm(dist)])
+            distances.append([i, atom.element, dist, np.linalg.norm(dist)])
 
         # Sort all distances
-        distances.sort(key=lambda s: s[2])
+        distances.sort(key=lambda s: s[3])
 
         return distances[0]
 
@@ -2092,6 +2109,11 @@ class Molecule(object):
         """
         # Empty the molecule's atoms
         self.atoms = []
+        self.bonds = []
+        self.angles = []
+        self.dihedrals = []
+        self.torsions = []
+        self.graph = None
 
         # Open the XYZ file and read the contents
         with open(file_name, 'r') as f:
@@ -2099,6 +2121,8 @@ class Molecule(object):
 
         # Add atom by atom to the Molecule object
         for a in data[2:]:
+            if not a.strip():
+                continue
             temp = a.split()
             temp = [float(c) if i != 0 else c for i, c in enumerate(temp)]
             self.add_atoms(Atom(*temp))
@@ -2144,11 +2168,11 @@ XYZ file of molecule: {self.name} - created by InformalFF
                 num_atoms += 1
                 selected_coords += template.format(
                                             s=a.element,
-                                            x=a.coordinates[1],
-                                            y=a.coordinates[2],
-                                            z=a.coordinates[3])
+                                            x=a.coordinates[0],
+                                            y=a.coordinates[1],
+                                            z=a.coordinates[2])
         
-        header = f"""{len(num_atoms)}
+        header = f"""{num_atoms}
 XYZ file of atom selection from molecule: {self.name} - created by InformalFF
 """
 
@@ -2206,7 +2230,7 @@ XYZ file of atom selection from molecule: {self.name} - created by InformalFF
     
     def max_distance_to_center(self,
                                center : str = "geom",
-                               radius : str = "none") -> float:
+                               radius : str = "none") -> tuple[int, float]:
         """ Method to get the radial distance from the molecule out
 
         Compute find the distance from the center of the molecule to
@@ -2246,10 +2270,10 @@ XYZ file of atom selection from molecule: {self.name} - created by InformalFF
         if len(self.atoms) == 1:
             symbol = self.atoms[0].element
             dist = PTE[symbol].vdw_radius
-            return 0, dist
+            return (0, dist)
         # If there's more than one atom
         else:
-            dist = 0
+            dist = 0.0
             atom = -1
             for i, a in enumerate(self.get_coords()):
                 # Compute vector between atoms
@@ -2269,7 +2293,7 @@ XYZ file of atom selection from molecule: {self.name} - created by InformalFF
                     dist = temp_dist
                     atom = i
             
-            return atom, dist
+            return (atom, dist)
     
     def charge_in_field(self,
                         x : float,
@@ -2442,12 +2466,12 @@ XYZ file of atom selection from molecule: {self.name} - created by InformalFF
             for d in range(1, delta_dots+1):
                 shell_dots[- d] -= 1
         # Create grid
-        grid = { 'X':[], 'Y':[], 'Z':[] }
+        grid = { 'x':[], 'y':[], 'z':[] }
         for s in range(len(shells)):
             temp_grid = fibonacci_grid_shell(mol_center,
                                              delta_r * s,
                                              shell_dots[s])
-            for q in "XYZ":
+            for q in "xyz":
                 grid[q] = grid[q] + temp_grid[q]
 
         return grid

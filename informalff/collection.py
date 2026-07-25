@@ -90,37 +90,45 @@ class Collection(object):
                 A general description of the Collection, its molecules,
                 atoms and dimensions.
         """
-        content = "\n==============================\n"
-        content += f"     Molecular Collection\n{self.name:^30}\n"
-        content += "------------------------------\n"
+        width = 40
+        dline = "=" * width
+        sline = "-" * width
+
+        content = f"\n{dline}\n"
+        content += f"     Molecular Collection\n{self.name:^{width}}\n"
+        content += sline + "\n"
         content += f" Total molecules: {self.__nmols}\n"
         content += f" Total atoms: {self.__natoms}\n\n"
-        content += "        Molecules\n------------------------------\n"
+        content += "        Molecules\n" + sline + "\n"
         if self.__nmols > 0:
             frags = [m[:3] for m in self.molecules.keys()]
             ufrags = set(frags)
             for f in ufrags:
-                content += f"{f}:\n"
-                content += f"Number of molecules: {frags.count(f)}\n"
+                content += f"> {f}:\n"
+                content += f"    Number of molecules: {frags.count(f)}\n"
+                temp = None
                 for m in self.molecules.keys():
                     if f in m:
                         temp = m
                         break
-                content += ("Atoms per molecule: "
-                            f"{self.molecules[temp].num_atoms()}\n")
-            content += "\n         Limits\n------------------------------\n"
+                if temp is not None:
+                    content += ("    Atoms per molecule: "
+                                f"{self.molecules[temp].num_atoms()}\n")
+                    content += ("    Formula: "
+                                f"{self.molecules[temp].get_formula()}\n")
+            content += "\n         Limits\n" + sline + "\n"
             lims = self.get_limits()
             content += "     Lower    Upper  Side\n"
-            content += (f"X:{lims['X'][0]:8.3f} {lims['X'][1]:8.3f}"
-                        f" {lims['X'][2]:5.2f}\n")
-            content += (f"Y:{lims['Y'][0]:8.3f} {lims['Y'][1]:8.3f}"
-                        f" {lims['Y'][2]:5.2f}\n")
-            content += (f"Z:{lims['Z'][0]:8.3f} {lims['Z'][1]:8.3f}"
-                        f" {lims['Z'][2]:5.2f}\n")
+            content += (f"X:{lims['x'][0]:8.3f} {lims['x'][1]:8.3f}"
+                        f" {lims['x'][2]:5.2f}\n")
+            content += (f"Y:{lims['y'][0]:8.3f} {lims['y'][1]:8.3f}"
+                        f" {lims['y'][2]:5.2f}\n")
+            content += (f"Z:{lims['z'][0]:8.3f} {lims['z'][1]:8.3f}"
+                        f" {lims['z'][2]:5.2f}\n")
         content += "\n            Density           \n"
-        content += "------------------------------\n"
+        content += sline + "\n"
         content += f"    {self.get_density():>8.4f} g/cm^3      \n"
-        content += "==============================\n"
+        content += f"{dline}\n"
         return content
     
     def __remap(self) -> None:
@@ -232,7 +240,7 @@ class Collection(object):
             if len(data[1]) != 3:
                 raise ValueError(
                         "Collection.__setitem__() Expected a 3D vector, "
-                        f"got an array with shape {data[2].shape}"
+                        f"got an array with shape {data[1].shape}"
                 )
             ref_code = self.__ref_atoms[idx]
             self.molecules[ref_code[0]].atoms[ref_code[1]].element = data[0]
@@ -254,7 +262,7 @@ class Collection(object):
                             f"symbol and the 3D coordinates, got {data}"
                     )
                 if not isinstance(data[jdx][0], str) or \
-                    not isinstance(data[jdx][2], np.ndarray):
+                    not isinstance(data[jdx][1], np.ndarray):
                     raise TypeError(
                             f"Collection.__setitem__() The item {jdx}: "
                             f"{data[jdx]} is not shaped as a list of: str "
@@ -268,7 +276,7 @@ class Collection(object):
             for jdx, op in enumerate(range(i, o, e)):
                 ref_code = self.__ref_atoms[op]
                 self.molecules[ref_code[0]].atoms[ref_code[1]].element = data[jdx][0]
-                self.molecules[ref_code[0]].atoms[ref_code[1]].coords = data[jdx][1]
+                self.molecules[ref_code[0]].atoms[ref_code[1]].coordinates = data[jdx][1]
         else:
             raise TypeError(
                     f"Collection.__setitem__() The argument {idx} is not an "
@@ -365,7 +373,8 @@ class Collection(object):
                   "in the collection; no molecule deleted."))
             return False
     
-    def get_atoms(self) -> list:
+    @property
+    def atoms(self) -> list:
         """ Method to get the collection's atoms
 
         Returns
@@ -461,7 +470,6 @@ class Collection(object):
 
         return density
     
-    @lru_cache(maxsize=1)
     def get_total_mass(self) -> float:
         """ Method to get the mass of the whole collection
 
@@ -479,7 +487,6 @@ class Collection(object):
 
         return mass
                 
-    @lru_cache(maxsize=1)
     def get_center(self) -> np.ndarray:
         """ Method to get the geometric center of the collection
 
@@ -507,7 +514,6 @@ class Collection(object):
 
         return collection_center
     
-    @lru_cache(maxsize=1)
     def get_center_of_mass(self) -> np.ndarray:
         """ Method to get the center of mass of the collection
 
@@ -525,14 +531,13 @@ class Collection(object):
             for atom in mol.atoms:
 
                 # Take the coordinates of each atom and add them to the center
-                collection_com += atom.coords * PTE[atom.element].mass
+                collection_com += atom.coordinates * PTE[atom.element].mass
 
         # Scaling it down by the number of atoms
         collection_com /= self.get_total_mass()
 
         return collection_com
 
-    @lru_cache(maxsize=3)
     def get_limits(self,
                    option : str = "edges",
                    factor : float = 2.5
@@ -562,23 +567,23 @@ class Collection(object):
         """
         # Trivial case
         if len(self.molecules) == 0:
-            return { "X" : [0, 0, 0], "Y" : [0, 0, 0], "Z" : [0, 0, 0] }
+            return { "x" : [0, 0, 0], "y" : [0, 0, 0], "z" : [0, 0, 0] }
 
         # Change the representation of the coordinates to
         # lists in each dimension
-        q_trsp = { q : [] for q in "eXYZ" }
+        q_trsp = { q : [] for q in "exyz" }
 
         for idm, mol in self.molecules.items():
             for a in mol.get_coords():
                 q_trsp["e"].append(a[0])
-                q_trsp["X"].append(a[1])
-                q_trsp["Y"].append(a[2])
-                q_trsp["Z"].append(a[3])
+                q_trsp["x"].append(a[1])
+                q_trsp["y"].append(a[2])
+                q_trsp["z"].append(a[3])
         
         # Build a new dictionary to hold the limits
         lims = {}
 
-        for q in "XYZ":
+        for q in "xyz":
 
             # Compute the minimum and maximum values
             low = min(q_trsp[q])
@@ -605,7 +610,7 @@ class Collection(object):
         if option == "factor":
 
             # Pad the limits
-            for q in "XYZ":
+            for q in "xyz":
                 lims[q][0] += factor
                 lims[q][1] -= factor
                 lims[q][2] = lims[q][1] - lims[q][0]
@@ -630,7 +635,7 @@ class Collection(object):
                 number_bins = {}
 
                 # Create the bins and separators
-                for q in "XYZ":
+                for q in "xyz":
 
                     # Compute the number of bins
                     number_bins[q] = abs(int(lims[q][1] / bin_width))
@@ -652,7 +657,7 @@ class Collection(object):
                     bin_idx[q] = np.searchsorted(seps[q], q_trsp[q])
 
                 # Add the mass of each atom to the bin
-                for q in "XYZ":
+                for q in "xyz":
                     for i, a in enumerate(q_trsp[q]):
                         bins[q][bin_idx[q][i]] += PTE[q_trsp['e'][i]].mass
 
@@ -661,16 +666,16 @@ class Collection(object):
                 iteration[iter]['number_bins'] = number_bins
             
             # Smoothening the distribution
-            final_bins = {q : [] for q in "XYZ"}
+            final_bins = {q : [] for q in "xyz"}
             for iter in iteration:
-                for q in "XYZ":
+                for q in "xyz":
                     x = iter['seps'][q]
                     y = iter['bins'][q]
                     final_bins[q] += list(zip(x, y))
 
             # Curve fitting
             curve_params = {}
-            for q in "XYZ":
+            for q in "xyz":
                 final_bins[q].sort(key=lambda x: x[0])
                 temp = list(zip(*final_bins[q]))
 
@@ -690,6 +695,8 @@ class Collection(object):
                 lims[q][2] = lims[q][1] - lims[q][0]
 
             return lims
+        
+        return lims
     
     def is_in_box(self, idm : str, dims : dict) -> bool:
         """ Check if a molecule is in a given box region
@@ -719,7 +726,7 @@ class Collection(object):
         # Sanity check
         if idm not in self.molecules.keys():
             raise ValueError((f"Collection.is_in_box() The molecule {idm} "
-                              "is part of the collection."))
+                              "is not part of the collection."))
 
         # Initialize the atom count
         inside_atoms = 0
@@ -728,23 +735,23 @@ class Collection(object):
         lims = self.get_limits()
 
         # Check that the dimensions of the box are within the collection
-        inside_min = [dims[q][0] > lims[q][0] for q in 'XYZ']
-        inside_max = [dims[q][1] < lims[q][1] for q in 'XYZ']
+        inside_min = [dims[q][0] > lims[q][0] for q in 'xyz']
+        inside_max = [dims[q][1] < lims[q][1] for q in 'xyz']
 
         inside = inside_min + inside_max
 
-        limx = list(dims['X'])
-        limy = list(dims['Y'])
-        limz = list(dims['Z'])
+        limx = list(dims['x'])
+        limy = list(dims['y'])
+        limz = list(dims['z'])
 
         # If any of the 6 coordinates of the box are out of the collection ...
         if sum(inside) != 6:
-            if inside[0]: limx[0] = lims['X'][0]
-            if inside[1]: limy[0] = lims['Y'][0]
-            if inside[2]: limz[0] = lims['Z'][0]
-            if inside[3]: limx[1] = lims['X'][1]
-            if inside[4]: limy[1] = lims['Y'][1]
-            if inside[5]: limz[1] = lims['Z'][1]
+            if inside[0]: limx[0] = lims['x'][0]
+            if inside[1]: limy[0] = lims['y'][0]
+            if inside[2]: limz[0] = lims['z'][0]
+            if inside[3]: limx[1] = lims['x'][1]
+            if inside[4]: limy[1] = lims['y'][1]
+            if inside[5]: limz[1] = lims['z'][1]
 
         # Iterate over atoms
         for a in self.molecules[idm].get_coords():
@@ -904,7 +911,7 @@ class Collection(object):
         box = {}
 
         # Create the lists for the grid
-        for q in "XYZ":
+        for q in "xyz":
             temp_low = limits[q][0] - limits[q][2] * padding
             temp_high = limits[q][1] + limits[q][2] * padding
             box[q] = np.linspace(temp_low,
@@ -914,11 +921,11 @@ class Collection(object):
         # Create empty grid
         grid = []
         # Iterate over x coordinate
-        for x in box['X']:
+        for x in box['x']:
             # Iterate over y coordinate
-            for y in box['Y']:
+            for y in box['y']:
                 # Iterate over z coordinate
-                for z in box['Z']:
+                for z in box['z']:
                     grid.append([x,y,z])
         
         return grid
@@ -1038,7 +1045,7 @@ class Collection(object):
     def corner_box(self) -> None:
         """ Re-position the collection putting an edge on the origin
 
-        The lower limits (in the X, Y, Z axes) of the collection will
+        The lower limits (in the x, y, z axes) of the collection will
         be re-positioned to the origin. The idea is not to have
         negative coordinates.
 
@@ -1050,7 +1057,7 @@ class Collection(object):
         """
 
         lims = self.get_limits()
-        mins = np.array([lims['X'][0], lims['Y'][0], lims['Z'][0]])
+        mins = np.array([lims['x'][0], lims['y'][0], lims['z'][0]])
 
         # Iterate over molecules
         for im, mol in self.molecules.items():
@@ -1061,12 +1068,14 @@ class Collection(object):
                 # Compute the new coordinates
                 new_coords = coords - mins
                 # Move the atom ...
-                a.coordinates = (new_coords[0],new_coords[1],new_coords[2])
+                a.coordinates = np.ndarray(new_coords[0],
+                                           new_coords[1],
+                                           new_coords[2])
     
     def center_box(self) -> None:
         """ Re-position the collection putting the center at the origin
 
-        The center of the box (in the X, Y, Z axes) of the collection will
+        The center of the box (in the x, y, z axes) of the collection will
         be re-positioned to the origin.
 
         Note
@@ -1079,7 +1088,7 @@ class Collection(object):
         center = self.get_center() * (-1)
 
         # Iterate over molecules
-        for mol in self.molecules.items():
+        for km, mol in self.molecules.items():
             # Iterate over atoms
             for a in mol.atoms:
                 # Move the current atom
@@ -1095,7 +1104,7 @@ class Collection(object):
         Parameters
         ----------
         dims : dict
-            A `dict` containing the X, Y, Z lower and upper limits
+            A `dict` containing the x, y, z lower and upper limits
             of the sub-collection.
 
         Returns
@@ -1105,7 +1114,7 @@ class Collection(object):
         """
         lims = self.get_limits()
         # Enconde the position of the sub-collection
-        ratio5 = [round(dims[q][0]/lims[q][1] * 1E6) for q in 'XYZ']
+        ratio5 = [round(dims[q][0]/lims[q][1] * 1E6) for q in 'xyz']
         into_hex = [hex(r)[2:] for r in ratio5]
         return into_hex
 
@@ -1118,24 +1127,27 @@ class Collection(object):
         Returns
         -------
         coords : dict
-            A `dict` with the X, Y, Z upper limits of the super-collection.
+            A `dict` with the x, y, z upper limits of the super-collection.
         """
 
         # If the encoding in the name was done correctly ...
-        if self.name.count(".") == 2:
+        if self.name.count("|") == 2:
             # Extract the hex-coordinates
-            namx, y, z = self.name.split('.')
+            namx, y, z = self.name.split('|')
             x = namx[-5:]
             # Get the limits of the current sub-collection
             l = self.get_limits()
             # Some structure
-            qs = {'X':x, 'Y':y, 'Z':z}
+            qs = {'x':x, 'y':y, 'z':z}
             # Convert the hex-coordinates into relative coordinates
             dec = {i:int(q, 16) * 1E-6 for i, q in qs.items()}
             # Create the final coordinates of the upper limit of the
             # super-collection.
-            coords = {q:round(l[q][0]/dec[q], 3) for q in 'XYZ'}
+            coords = {q:round(l[q][0]/dec[q], 3) for q in 'xyz'}
             return coords
+        else:
+            raise ValueError(("Collection.__decoord() The name of the "
+                              "collection is not in the expected format."))
 
 
     def sub_collection(self, dims : dict):
@@ -1181,13 +1193,13 @@ class Collection(object):
         #      the current function.
 
         # Check that the dimensions of the small box are within the collection
-        outside = [dims[q][1] > lims[q][1] for q in 'XYZ']
+        outside = [dims[q][1] > lims[q][1] for q in 'xyz']
 
         # Initialize dimensions of the sub-box
         sub_dims = {}
 
         # Dimensions of the sub-box
-        for i, q in enumerate('XYZ'):
+        for i, q in enumerate('xyz'):
             # If this dimension is outside, establish new limits (PBC)
             if outside[i]:
                 sub_dims[q] = [[dims[q][0], lims[q][1]],
@@ -1196,12 +1208,12 @@ class Collection(object):
             else:
                 sub_dims[q] = [[dims[q][0], dims[q][1]]]
 
-        # Building the list of molecules within X
-        possible_x = [[] for i in range(len(sub_dims['X']))]
-        # Building the list of molecules within Y
-        possible_y = [[] for j in range(len(sub_dims['Y']))]
-        # Building the list of molecules within Z
-        possible_z = [[] for k in range(len(sub_dims['Z']))]
+        # Building the list of molecules within x
+        possible_x = [[] for i in range(len(sub_dims['x']))]
+        # Building the list of molecules within y
+        possible_y = [[] for j in range(len(sub_dims['y']))]
+        # Building the list of molecules within z
+        possible_z = [[] for k in range(len(sub_dims['z']))]
 
         # Iterate over all molecules ...
         for idm, mol in self.molecules.items():
@@ -1210,20 +1222,20 @@ class Collection(object):
                 # Iterate over the new limits
 
                 # Check over all domains
-                for i, x in enumerate(sub_dims['X']):
-                    # Add molecule if within X
+                for i, x in enumerate(sub_dims['x']):
+                    # Add molecule if within x
                     if (a[1] > x[0]) and (a[1] < x[1]):
                         possible_x[i].append(idm)
 
                 # Check over all domains
-                for j, y in enumerate(sub_dims['Y']):
-                    # Add molecule if within Y
+                for j, y in enumerate(sub_dims['y']):
+                    # Add molecule if within y
                     if (a[2] > y[0]) and (a[2] < y[1]):
                         possible_y[j].append(idm)
 
                 # Check over all domains
-                for k, z in enumerate(sub_dims['Z']):
-                    # Add molecule if within Z
+                for k, z in enumerate(sub_dims['z']):
+                    # Add molecule if within z
                     if (a[3] > z[0]) and (a[3] < z[1]):
                         possible_z[k].append(idm)
         
@@ -1247,9 +1259,9 @@ class Collection(object):
         for ids, mol_set in mol_sets.items():
 
             # Prepare to move the molecules
-            motion = np.array([ int(ids[0]) * lims['X'][2],
-                                int(ids[1]) * lims['Y'][2],
-                                int(ids[2]) * lims['Z'][2],])
+            motion = np.array([ int(ids[0]) * lims['x'][2],
+                                int(ids[1]) * lims['y'][2],
+                                int(ids[2]) * lims['z'][2],])
 
             # Iterate over all molecules
             for idm in mol_set:
@@ -1264,12 +1276,14 @@ class Collection(object):
         sub_lims = sub_c.get_limits()
         codes = self.__encoord(sub_lims)
         # Name the new collection
-        sub_c.name = f'{self.name}_{codes[0]}.{codes[1]}.{codes[2]}'
+        sub_c.name = f'{self.name}_{codes[0]}|{codes[1]}|{codes[2]}'
 
         return sub_c
 
 
-    def save_as_pdb(self, f_nam : str = "collection") -> None:
+    def save_as_pdb(self,
+                    f_nam : str = "collection",
+                    occupancies : list = []) -> None:
         """ Save collection as an PDB file
 
         This method does not return anything, nor it requires
@@ -1279,16 +1293,48 @@ class Collection(object):
         ----------
         f_nam : str
             The name of the file *without the extension*!
+        occupancies : list
+            List of occupancies
         """
+        # Check that there are molecules in the collection
+        if len(self.molecules) == 0:
+            raise ValueError("Collection.save_as_pdb() The collection is empty. "
+                             "There are no molecules to save.")
+
+        # Check that there are occupancies
+        if len(occupancies) == 0:
+            # If not, set all occupancies to 1.0
+            occupancies = [1.0] * self.__natoms
+
+        # Check that there is the same number of occupancies as atoms
+        if len(occupancies) != self.__natoms:
+            raise ValueError("Collection.save_as_pdb() The collection has "
+                             f"{self.__natoms} atoms, but there are "
+                             f"{len(occupancies)} occupancies.")
 
         # Initialize the PDB file content
         content = ("CRYST1    0.000    0.000    0.000  "
                     "90.00  90.00  90.00 P 1           1\n")
 
         # Create a template for the PDB coordinates
-        pdb_template = ("ATOM {num:>6} {s:>2}   {nam} X{molnum:>4}     "
-                        "{x:7.3f} {y:7.3f} {z:7.3f}  1.00  0.00          "
-                        "{s:>2}\n")
+        # https://www.cgl.ucsf.edu/chimera/docs/UsersGuide/tutorials/pdbintro.html
+        pdb_template = ("ATOM "        #                  1 -  4 + space
+                        "{num:>6} "    # Atom number:     6 - 11 + space
+                        "{ana:<4} "    # Atom name:      13 - 16 + space
+                        "{nam:>3} "    # Residue name:   18 - 20 + space
+                        "X"            # Chain ID:       22 - 22
+                        "{molnum:>4} " # Residue number: 23 - 26 + space
+                        "   "          # Whitespace:     28 - 30
+                        "{x:8.3f}"     # X coordinate:   31 - 38
+                        "{y:8.3f}"     # Y coordinate:   39 - 46
+                        "{z:8.3f}"     # Z coordinate:   47 - 54
+                        "{occ:>6.2f}"  # Occupancy:      55 - 60
+                        "  0.00"       # Temperature f:  61 - 66
+                        "      "       # Whitespace:     67 - 72
+                        "    "         # Segment ID:     73 - 76
+                        "{s:>2}"       # Element symbol: 77 - 78
+                        "  \n"         # Charge:         79 - 80
+                        )
 
         atom_counter = 0
 
@@ -1305,7 +1351,7 @@ class Collection(object):
                 # Check if there's an Amber name
                 try:
                     anam = a.amber_name
-                except AttributeError as e:
+                except AttributeError:
                     anam = a.element
 
                 # Build atom line
@@ -1317,6 +1363,7 @@ class Collection(object):
                     x=coords[0],
                     y=coords[1],
                     z=coords[2],
+                    occ=occupancies[atom_counter - 1],
                     s=a.element)
 
         content += "END\n"
@@ -1378,14 +1425,15 @@ XYZ file of collection: {self.name} - created by InformalFF
         for idm, mol in self.molecules.items():
             # Iterate over atoms
             for a in mol.atoms:
-                num_atoms += 1
-                selected_coords += template.format(
-                                            s=a.element,
-                                            x=a.coords[1],
-                                            y=a.coords[2],
-                                            z=a.coords[3])
+                if a.flag:
+                    num_atoms += 1
+                    selected_coords += template.format(
+                                                s=a.element,
+                                                x=a.coordinates[0],
+                                                y=a.coordinates[1],
+                                                z=a.coordinates[2])
 
-        header = f"""{self.__natoms}
+        header = f"""{num_atoms}
 XYZ file of atom selection from collection: {self.name} - created by InformalFF
 """
 

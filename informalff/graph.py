@@ -235,7 +235,7 @@ class MolecularGraph:
         next_level = [a for a in self.get_neighbors(atom2) if a != atom1]
 
         # Add the current atom to the path
-        if path is None:
+        if path is None or len(path) == 0:
             path = [atom2]
 
         # If the depth is 0 or if the next level is empty, return emptiness
@@ -280,7 +280,7 @@ class MolecularGraph:
             The rings of the molecule as a list"""
         
         # Check if the path is empty
-        if path is None:
+        if path is None or len(path) == 0:
             # If it is, start with the first atom
             path = [0]
 

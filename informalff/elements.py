@@ -1,9 +1,10 @@
-import os                                # To navigate the file system
-from numpy import nan                    # To handle missing values
-from json import load                    # To load the geometries from a JSON file    
-from pandas import read_csv              # To manage tables and databases
-from pathlib import Path                 # To locate files in the file system
-from dataclasses import dataclass, field # To create data classes
+import os                                 # To navigate the file system
+from numpy import nan                     # To handle missing values
+from json import load                     # To load the geometries from a JSON file    
+from pandas import read_csv               # To manage tables and databases
+from pathlib import Path                  # To locate files in the file system
+from warnings import warn, filterwarnings # To issue warnings to the user
+from dataclasses import dataclass, field  # To create data classes
 
 # ------------------------------------------------------- #
 #              Setting up the Periodic Table              #
@@ -22,6 +23,8 @@ all_symbols = set(PERIODIC_TABLE.index.to_list())
 # Load the geometries from the JSON file
 with open(os.path.join(here, "data", "geometries.json"), "r") as f:
     raw_geometries = load(f)
+
+filterwarnings("ignore")
 
 @dataclass(frozen=True)
 class Element:
@@ -95,15 +98,18 @@ class Element:
         """
         # Get the atomic radius of the atom
         # Convert from pm to Ångstrom
-        cr = PERIODIC_TABLE.loc[self.symbol, "CovalentRadius"] / 100
-        vdw = PERIODIC_TABLE.loc[self.symbol, "AtomicRadius"] / 100
+        cr = PERIODIC_TABLE.loc[self.symbol, "CovalentRadius"]
+        vdw = PERIODIC_TABLE.loc[self.symbol, "AtomicRadius"]
 
         # Check if the value exists
-        if cr != "":
-            return cr, vdw
-        else:
-            raise ValueError("Atom.__get_atomic_radius(): "
-                             f"Atomic radius not found for {self.symbol}")
+        cr = float(cr) / 100 if cr != "" else 0.0
+        vdw = float(vdw) / 100 if vdw != "" else 0.0
+
+        if cr == 0.0 or vdw == 0.0:
+            warn("Atom.__get_atomic_radius(): "
+                 f"Atomic radius not found for {self.symbol}")
+
+        return cr, vdw
 
     def __get_electronegativity(self) -> float:
         """
@@ -116,13 +122,14 @@ class Element:
         """
         # Get the electronegativity of the element
         en = PERIODIC_TABLE.loc[self.symbol, "Electronegativity"]
+        en = float(en) if en != "" else 0.0
+
+        if en == 0.0:
+            warn("Element.__get_electronegativity(): "
+                 f"Electronegativity not found for {self.symbol}")
 
         # Check if the value exists
-        if en != "":
-            return float(en)
-        else:
-            raise ValueError("Element.__get_electronegativity(): "
-                             f"Electronegativity not found for {self.symbol}")
+        return en
     
     def __get_oxidation_states(self) -> list:
         """
@@ -145,8 +152,9 @@ class Element:
             except ValueError:
                 return [int(ox) for ox in oxs.split(",")]
         else:
-            raise ValueError("Element.__get_oxidation_states(): "
-                             f"Oxidation states not found for {self.symbol}")
+            warn("Element.__get_oxidation_states(): "
+                 f"Oxidation states not found for {self.symbol}")
+            return []
 
     def __parse_electron_configuration(self) -> dict:
         """
@@ -311,13 +319,15 @@ class AtomGeometry(dict):
 pre_PTE = {}
 for symbol in all_symbols:
     data = PERIODIC_TABLE.loc[symbol]
+    i_energy = data["IonizationEnergy"]
+    e_affinity = data["ElectronAffinity"]
     element = Element(
         symbol = symbol,
         name = data["Name"],
         number = int(data["AtomicNumber"]),
         mass = float(data["AtomicMass"]),
-        ionization_energy = float(data["IonizationEnergy"]),
-        electron_affinity = float(data["ElectronAffinity"])
+        ionization_energy = float(i_energy) if i_energy != "" else 0.0,
+        electron_affinity = float(e_affinity) if e_affinity != "" else 0.0
     )
     pre_PTE[symbol] = element
 
