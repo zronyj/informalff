@@ -1,0 +1,197 @@
+####################################################################### 
+# 
+# This file contains crystal structure data downloaded from the 
+# Cambridge Structural Database (CSD) hosted by the Cambridge 
+# Crystallographic Data Centre (CCDC).
+# 
+# Full information about CCDC data access policies and citation 
+# guidelines are available at http://www.ccdc.cam.ac.uk/access/V1 
+# 
+# Audit and citation data items may have been added by the CCDC. 
+# Please retain this information to preserve the provenance of 
+# this file and to allow appropriate attribution of the data. 
+# 
+#######################################################################
+
+data_dl-alanine_100K
+_audit_block_doi                 10.5517/cctd5r3
+_database_code_depnum_ccdc_archive 'CCDC 756485'
+_audit_update_record             
+;
+2009-11-30 deposited with the CCDC.	2026-06-02 downloaded from the CCDC.
+;
+_audit_creation_method           SHELXL-97
+_chemical_name_systematic        DL-alanine
+_chemical_name_common            DL-alanine
+_chemical_formula_moiety         'C3 H7 N O2'
+_chemical_formula_sum            'C3 H7 N O2'
+_chemical_compound_source        'ICN Biomedicals'
+_exptl_crystal_recrystallization_method 'slow evaporation from water solution'
+_chemical_melting_point          ?
+_exptl_crystal_description       needle
+_exptl_crystal_colour            colorless
+_diffrn_ambient_temperature      100(2)
+_chemical_formula_weight         89.10
+_symmetry_cell_setting           orthorhombic
+_symmetry_space_group_name_H-M   'P 21 c n'
+_symmetry_int_tables_number      33
+_chemical_absolute_configuration rm
+loop_
+_symmetry_equiv_pos_as_xyz
+'x, y, z'
+'x+1/2, y+1/2, -z+1/2'
+'x+1/2, -y, -z'
+'x, -y+1/2, z+1/2'
+_cell_length_a                   5.8460(9)
+_cell_length_b                   5.9702(15)
+_cell_length_c                   11.934(2)
+_cell_angle_alpha                90.00
+_cell_angle_beta                 90.00
+_cell_angle_gamma                90.00
+_cell_volume                     416.54(14)
+_cell_formula_units_Z            4
+_exptl_crystal_density_diffrn    1.421
+_exptl_special_details           
+;
+?
+;
+_diffrn_radiation_probe          x-ray
+_diffrn_radiation_type           MoK\a
+_diffrn_radiation_wavelength     0.71073
+_diffrn_source                   'fine-focus sealed tube'
+_diffrn_reflns_number            2884
+_diffrn_reflns_av_R_equivalents  0.0543
+_diffrn_reflns_av_sigmaI/netI    0.0368
+_diffrn_reflns_limit_h_min       -6
+_diffrn_reflns_limit_h_max       7
+_diffrn_reflns_limit_k_min       -7
+_diffrn_reflns_limit_k_max       7
+_diffrn_reflns_limit_l_min       -14
+_diffrn_reflns_limit_l_max       14
+_diffrn_reflns_theta_min         3.41
+_diffrn_reflns_theta_max         26.37
+_reflns_number_total             809
+_reflns_number_gt                768
+_reflns_threshold_expression     >2sigma(I)
+_refine_ls_abs_structure_Flack   -0.6(12)
+_refine_ls_number_reflns         809
+_refine_ls_number_parameters     76
+_refine_ls_number_restraints     1
+_refine_ls_R_factor_all          0.0301
+_refine_ls_R_factor_gt           0.0266
+_refine_ls_wR_factor_ref         0.0612
+_refine_ls_wR_factor_gt          0.0601
+_refine_ls_goodness_of_fit_ref   1.073
+_refine_ls_restrained_S_all      1.072
+_refine_ls_shift/su_max          0.000
+_refine_ls_shift/su_mean         0.000
+loop_
+_atom_site_label
+_atom_site_type_symbol
+_atom_site_fract_x
+_atom_site_fract_y
+_atom_site_fract_z
+_atom_site_U_iso_or_equiv
+_atom_site_adp_type
+_atom_site_occupancy
+_atom_site_calc_flag
+_atom_site_refinement_flags
+_atom_site_disorder_assembly
+_atom_site_disorder_group
+C1 C 0.0007(3) 0.1915(2) 0.35594(10) 0.0116(3) Uani 1 d . . .
+C2 C 0.2426(3) 0.2852(2) 0.33618(11) 0.0117(3) Uani 1 d . . .
+H1 H 0.260(3) 0.322(3) 0.2552(14) 0.014 Uiso 1 d . . .
+C3 C 0.2884(3) 0.4893(3) 0.40850(13) 0.0156(4) Uani 1 d . . .
+H7 H 0.440(4) 0.544(3) 0.3930(14) 0.019 Uiso 1 d . . .
+H5 H 0.280(3) 0.447(3) 0.4874(16) 0.019 Uiso 1 d . . .
+H6 H 0.174(4) 0.609(3) 0.3909(16) 0.019 Uiso 1 d . . .
+O1 O -0.15979(19) 0.30664(17) 0.31425(8) 0.0149(2) Uani 1 d . . .
+O2 O -0.02021(19) 0.01472(16) 0.41074(8) 0.0153(3) Uani 1 d . . .
+N1 N 0.4172(2) 0.1089(2) 0.36072(11) 0.0120(3) Uani 1 d . . .
+H2 H 0.397(3) -0.009(3) 0.3107(14) 0.014 Uiso 1 d . . .
+H4 H 0.412(3) 0.061(3) 0.4323(15) 0.014 Uiso 1 d . . .
+H3 H 0.564(4) 0.168(3) 0.3517(14) 0.014 Uiso 1 d . . .
+loop_
+_atom_site_aniso_label
+_atom_site_aniso_U_11
+_atom_site_aniso_U_22
+_atom_site_aniso_U_33
+_atom_site_aniso_U_23
+_atom_site_aniso_U_13
+_atom_site_aniso_U_12
+C1 0.0080(7) 0.0161(6) 0.0107(6) -0.0033(5) -0.0001(5) -0.0007(6)
+C2 0.0093(7) 0.0129(7) 0.0130(6) 0.0012(6) -0.0004(5) 0.0006(6)
+C3 0.0112(10) 0.0158(7) 0.0198(8) -0.0006(6) 0.0002(6) -0.0015(6)
+O1 0.0084(5) 0.0191(5) 0.0172(5) 0.0020(4) -0.0001(4) -0.0004(4)
+O2 0.0126(6) 0.0173(5) 0.0161(4) 0.0044(4) 0.0006(5) -0.0008(4)
+N1 0.0069(6) 0.0156(7) 0.0137(6) 0.0003(5) -0.0004(5) 0.0000(5)
+loop_
+_geom_bond_atom_site_label_1
+_geom_bond_atom_site_label_2
+_geom_bond_distance
+C1 O2 1.2475(17)
+C1 O1 1.2652(18)
+C1 C2 1.5390(19)
+C2 N1 1.4952(18)
+C2 C3 1.517(2)
+C2 H1 0.996(16)
+C3 H7 0.96(2)
+C3 H5 0.976(19)
+C3 H6 1.00(2)
+N1 H2 0.930(16)
+N1 H4 0.901(17)
+N1 H3 0.94(2)
+loop_
+_geom_angle_atom_site_label_1
+_geom_angle_atom_site_label_2
+_geom_angle_atom_site_label_3
+_geom_angle
+O2 C1 O1 126.38(14)
+O2 C1 C2 118.56(12)
+O1 C1 C2 115.06(11)
+N1 C2 C3 109.47(13)
+N1 C2 C1 109.97(11)
+C3 C2 C1 111.53(11)
+N1 C2 H1 106.0(9)
+C3 C2 H1 110.9(10)
+C1 C2 H1 108.9(9)
+C2 C3 H7 109.0(10)
+C2 C3 H5 109.5(10)
+H7 C3 H5 108.7(14)
+C2 C3 H6 109.8(11)
+H7 C3 H6 109.3(14)
+H5 C3 H6 110.6(14)
+C2 N1 H2 108.5(10)
+C2 N1 H4 112.5(11)
+H2 N1 H4 111.5(14)
+C2 N1 H3 109.8(11)
+H2 N1 H3 109.3(16)
+H4 N1 H3 105.2(15)
+loop_
+_geom_torsion_atom_site_label_1
+_geom_torsion_atom_site_label_2
+_geom_torsion_atom_site_label_3
+_geom_torsion_atom_site_label_4
+_geom_torsion
+O2 C1 C2 N1 15.81(16)
+O1 C1 C2 N1 -164.72(11)
+O2 C1 C2 C3 -105.83(14)
+O1 C1 C2 C3 73.64(16)
+loop_
+_geom_hbond_atom_site_label_D
+_geom_hbond_atom_site_label_H
+_geom_hbond_atom_site_label_A
+_geom_hbond_distance_DH
+_geom_hbond_distance_HA
+_geom_hbond_distance_DA
+_geom_hbond_angle_DHA
+_geom_hbond_site_symmetry_A
+N1 H4 O2 0.901(17) 1.968(18) 2.8491(16) 165.4(17) 3_556
+N1 H3 O1 0.94(2) 1.87(2) 2.7955(17) 171.3(15) 1_655
+N1 H2 O1 0.930(16) 1.883(17) 2.7965(16) 166.7(14) 2_545
+_diffrn_measured_fraction_theta_max 1.000
+_diffrn_reflns_theta_full        26.37
+_diffrn_measured_fraction_theta_full 1.000
+_refine_diff_density_max         0.191
+_refine_diff_density_min         -0.177
+_refine_diff_density_rms         0.036

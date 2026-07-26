@@ -1,0 +1,119 @@
+{
+    "triclinic": {
+        "active": [
+            "a",
+            "b",
+            "c",
+            "alpha",
+            "beta",
+            "gamma"
+        ],
+        "fix": {},
+        "equal": []
+    },
+    "monoclinic": {
+        "active": [
+            "a",
+            "b",
+            "c",
+            "beta"
+        ],
+        "fix": {
+            "alpha": 90.0,
+            "gamma": 90.0
+        },
+        "equal": []
+    },
+    "orthorhombic": {
+        "active": [
+            "a",
+            "b",
+            "c"
+        ],
+        "fix": {
+            "alpha": 90.0,
+            "beta": 90.0,
+            "gamma": 90.0
+        },
+        "equal": []
+    },
+    "tetragonal": {
+        "active": [
+            "a",
+            "c"
+        ],
+        "fix": {
+            "alpha": 90.0,
+            "beta": 90.0,
+            "gamma": 90.0
+        },
+        "equal": [
+            [
+                "b",
+                "a"
+            ]
+        ]
+    },
+    "trigonal_rhombohedral": {
+        "active": [
+            "a",
+            "alpha"
+        ],
+        "fix": {},
+        "equal": [
+            [
+                "b",
+                "a"
+            ],
+            [
+                "c",
+                "a"
+            ],
+            [
+                "beta",
+                "alpha"
+            ],
+            [
+                "gamma",
+                "alpha"
+            ]
+        ]
+    },
+    "(trigonal)hexagonal": {
+        "active": [
+            "a",
+            "c"
+        ],
+        "fix": {
+            "alpha": 90.0,
+            "beta": 90.0,
+            "gamma": 120.0
+        },
+        "equal": [
+            [
+                "b",
+                "a"
+            ]
+        ]
+    },
+    "cubic": {
+        "active": [
+            "a"
+        ],
+        "fix": {
+            "alpha": 90.0,
+            "beta": 90.0,
+            "gamma": 90.0
+        },
+        "equal": [
+            [
+                "b",
+                "a"
+            ],
+            [
+                "c",
+                "a"
+            ]
+        ]
+    }
+}

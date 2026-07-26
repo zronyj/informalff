@@ -85,7 +85,7 @@ class QM_driver(ABC):
 
         The frequencies will be saved in cm^-1 units.
         """
-        nb_atoms = self.sub_structure.get_num_atoms()
+        nb_atoms = self.sub_structure.num_atoms()
         zeros = nb_atoms * 3 - len(eigenvalues)
 
         # Computing the frequencies
@@ -152,7 +152,7 @@ class QM_driver(ABC):
         path : str
             The path where the normal modes should be saved
         """
-        nb_atoms = self.sub_structure.get_num_atoms()
+        nb_atoms = self.sub_structure.num_atoms()
         nb_dims = nb_atoms * 3
         zeros = nb_dims - modes.shape[1]
 
@@ -223,7 +223,7 @@ class QM_driver(ABC):
         if projected:
             nb_dims = hessian.shape[0]
         else:
-            nb_atoms = self.sub_structure.get_num_atoms()
+            nb_atoms = self.sub_structure.num_atoms()
             nb_dims = nb_atoms * 3
 
         output = f"{nb_dims} {nb_dims}\n"
@@ -258,7 +258,7 @@ class QM_driver(ABC):
         path : str
             The path where the gradient should be saved
         """
-        nb_atoms = self.sub_structure.get_num_atoms()
+        nb_atoms = self.sub_structure.num_atoms()
 
         # Angstrom output
         output_a = f"{nb_atoms} 3\n"
@@ -290,7 +290,7 @@ class QM_driver(ABC):
 
     def _compute_trans_rot(self,
                            masses : np.ndarray,
-                           bohr : bool = True) -> list[np.ndarray]:
+                           bohr : bool = True) -> tuple[list, str]:
         """
         Method to compute the translational and rotational
         displacements independently.
@@ -308,8 +308,9 @@ class QM_driver(ABC):
         D : list[np.ndarray]
             A list of numpy arrays with the translational and
             rotational displacements
+        shape : str
+            The shape of the molecule
         """
-
         # Displacements (translations [3] and rotations [3] = 6)
         D = [[] for i in range(6)]
 
@@ -323,7 +324,7 @@ class QM_driver(ABC):
 
         # Getting the shape of the molecule from its moments of inertia
         A, B, C = sorted(iv)
-        if self.sub_structure.get_num_atoms() == 1 and \
+        if self.sub_structure.num_atoms() == 1 and \
             np.abs(A) < 1e-7 and np.abs(B) < 1e-7 and np.abs(C) < 1e-7:
             shape = "SINGLE_ATOM"
         elif np.allclose(A, B, atol=1e-7) and np.allclose(B, C, atol=1e-7):
@@ -384,7 +385,7 @@ class QM_driver(ABC):
             self,
             delta : float = 5e-3 * BOHR2ANG,
             n_cores : int = mp.cpu_count()
-            ) -> tuple:
+            ) -> dict:
         r""" Method to compute the numerical hessian of the
         given structure, using the QM engine.
         
@@ -448,7 +449,7 @@ class QM_driver(ABC):
         E_base = base_results['Energy[SCF]']
 
         # Get the number of atoms, and prepare the displacements
-        n_atoms = self.sub_structure.get_num_atoms()
+        n_atoms = self.sub_structure.num_atoms()
 
         # Keep a reference to the original structure
         reference = deepcopy(self.sub_structure)
@@ -642,7 +643,7 @@ class QM_driver(ABC):
             self,
             delta : float = 5e-3 * BOHR2ANG,
             n_cores : int = mp.cpu_count()
-            ) -> tuple:
+            ) -> dict:
         """ Method to compute the numerical hessian of the
         given structure, using the QM engine.
         
@@ -686,7 +687,7 @@ class QM_driver(ABC):
         base_energy = base_results['Energy[SCF]']
 
         # Get the number of atoms, and prepare the displacements
-        n_atoms = self.sub_structure.get_num_atoms()
+        n_atoms = self.sub_structure.num_atoms()
 
         # Keep a reference to the original structure
         reference = deepcopy(self.sub_structure)
@@ -881,7 +882,7 @@ class QM_driver(ABC):
         E_base = base_results['Energy[SCF]']
 
         # Get the number of atoms, and prepare the displacements
-        n_atoms = self.sub_structure.get_num_atoms()
+        n_atoms = self.sub_structure.num_atoms()
 
         # Keep a reference to the original structure
         reference = deepcopy(self.sub_structure)
@@ -1225,7 +1226,7 @@ class QM_driver(ABC):
                                                     ghost=False)
         
         if self.verbose:
-            print(("\Doing all the calculations for a Counterpoise Correction "
+            print(("Doing all the calculations for a Counterpoise Correction "
                   f"using {n_cores} cores"), end=" ... ", flush=True)
 
         # Run the calculations and parse the results (in parallel if possible)
@@ -1245,16 +1246,11 @@ class QM_driver(ABC):
             
             # Run the calculations in parallel
             pool = mp.Pool(n_cores)
-            pre_results = list(
-                        tqdm(
-                            pool.imap_unordered(
-                                worker,
-                                [(k, v) for k, v in paths.items()]
-                            ),
-                            total = len(paths),
-                            disable = not self.verbose
-                        )
-                    )
+            pre_results = list(tqdm(pool.imap_unordered(
+                                        worker,
+                                        [(k, v) for k, v in paths.items()]),
+                                    total = len(paths),
+                                    disable = not self.verbose))
             pool.close()
             pool.join()
 
@@ -1326,7 +1322,7 @@ class QM_driver(ABC):
         # Function to create the key for the dictionary
         key_maker = lambda d: int(np.round(d / delta))
 
-        if self.sub_structure.get_num_atoms() < 1:
+        if self.sub_structure.num_atoms() < 1:
             raise ValueError("QM_driver.num_gradient() The sub_structure "
                              "must contain at least 1 atom to compute "
                              "a Gradient vector.")
@@ -1360,7 +1356,7 @@ class QM_driver(ABC):
         base_energy = base_results['Energy[SCF]']
 
         # Get the number of atoms, and prepare the displacements
-        n_atoms = self.sub_structure.get_num_atoms()
+        n_atoms = self.sub_structure.num_atoms()
         deltas = np.linspace(- delta * points, delta * points, 2 * points + 1)
         deltas = np.delete(deltas, points)  # Remove the zero displacement
         deltas = [float(Fraction(d).limit_denominator()) for d in deltas]
@@ -1529,12 +1525,12 @@ class QM_driver(ABC):
             the normal modes, and the working directory
         """
         # Mass-weighting the Hessian
-        nb_atoms = self.sub_structure.get_num_atoms()
+        nb_atoms = self.sub_structure.num_atoms()
 
         masses = np.zeros(nb_atoms)
         i_sqrt_mass = np.zeros(nb_atoms * 3)
         for a in range(nb_atoms):
-            masses[a] = self.sub_structure[a].mass
+            masses[a] = self.sub_structure.atoms[a].mass
             for i in range(3):
                 i_sqrt_mass[3*a + i] = 1 / np.sqrt(masses[a])
     
@@ -1603,7 +1599,7 @@ class QM_driver(ABC):
             accuracy : str = "medium",
             delta : float = 5e-3 * BOHR2ANG,
             n_cores : int = mp.cpu_count(),
-            pre_grad : dict = {}) -> None:
+            pre_grad : dict = {}) -> dict:
         r""" Method to compute the numerical hessian of the
         given structure, using the QM engine.
         
@@ -1634,6 +1630,12 @@ class QM_driver(ABC):
             If you have a previously calculated gradient, please
             include it here to minimize the number of energy evaluations.
         
+        Returns
+        -------
+        dict
+            A dictionary with the Hessian matrix, the frequencies,
+            the normal modes, and the working directory
+        
         Raises
         ------
         ValueError
@@ -1653,7 +1655,7 @@ class QM_driver(ABC):
                             }
                             {4 \delta^2}
         """
-        if self.sub_structure.get_num_atoms() < 2:
+        if self.sub_structure.num_atoms() < 2:
             raise ValueError("QM_driver.num_hessian() The sub_structure "
                              "must contain at least 2 atoms to compute "
                              "a Hessian matrix.")
@@ -2113,7 +2115,7 @@ class PSI4_driver(QM_driver):
     
     def create_input(self,
                      x_name : str = "",
-                     ref_path : str = "") -> None:
+                     ref_path : str = "") -> str:
         """ Method to create the input files for the Psi4 calculation
 
         Parameters
@@ -2123,6 +2125,12 @@ class PSI4_driver(QM_driver):
         ref_path : str
             Path to a reference directory where some files could be
             copied from
+        
+        Returns
+        -------
+        work : str
+            The path to the directory where the input files have been
+            placed, and where the Psi4 calculation should be executed
         """
         # Renaming the molecule as "geometry"
         self.sub_structure.name = "geometry"

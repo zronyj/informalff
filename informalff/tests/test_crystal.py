@@ -12,7 +12,7 @@ from copy import deepcopy
 import informalff
 
 @pytest.fixture
-def azuelene_cell():
+def azuelene_cell() -> dict:
     data = {
         'a': 7.7154,
         'b': 5.9019,
@@ -25,7 +25,7 @@ def azuelene_cell():
     return data
 
 @pytest.fixture
-def paracetamol_cell():
+def paracetamol_cell() -> dict:
     data = {
         'a': 11.805,
         'b': 17.164,
@@ -112,6 +112,27 @@ def test_crystal_cell_change_params(azuelene_cell):
 
     assert np.allclose(cell_param.vector, new_vector)
     assert np.round(cell_param.volume, 3) == 384.0
+
+def test_crystal_cell_find_type(azuelene_cell, paracetamol_cell):
+
+    azl = azuelene_cell
+    pctml = paracetamol_cell
+
+    del(azl["volume"])
+    del(pctml["volume"])
+
+    azl_cell_param = informalff.Cell(azl)
+    pctml_cell_param = informalff.Cell(pctml)
+
+    azl_matches = azl_cell_param.find_type()
+    assert len(azl_matches) > 0
+    assert azl_matches[0]['type'] == 'monoclinic'
+    assert azl_matches[0]['num_active'] == 4
+
+    pctml_matches = pctml_cell_param.find_type()
+    assert len(pctml_matches) > 0
+    assert pctml_matches[0]['type'] == 'orthorhombic'
+    assert pctml_matches[0]['num_active'] == 3
 
 def test_crystal_symmetry_operations():
 

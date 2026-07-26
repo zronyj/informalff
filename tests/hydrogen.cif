@@ -1,0 +1,29 @@
+#######################################################################
+#                           InformalCrystal                           
+#######################################################################
+
+data_h2
+_cell_length_a 2.0700000000
+_cell_length_b 3.5000000000
+_cell_length_c 2.1000000000
+_cell_angle_alpha 90.0000000000
+_cell_angle_beta 120.0000000000
+_cell_angle_gamma 90.0000000000
+_cell_volume 13.1761435059
+_symmetry_cell_setting Triclinic
+_symmetry_space_group_name_H-M 'P-1'
+_symmetry_Int_Tables_number 2
+loop_
+_symmetry_equiv_pos_site_id
+_symmetry_equiv_pos_as_xyz
+1 x,y,z
+2 -x,-y,-z
+loop_
+_atom_site_label
+_atom_site_type_symbol
+_atom_site_fract_x
+_atom_site_fract_y
+_atom_site_fract_z
+H1 H 0.3333333333 0.1900000000 0.4800000000
+H2 H 0.6666666667 0.3000000000 0.5200000000
+#END
