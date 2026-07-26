@@ -26,7 +26,7 @@ requires-python = ">=3.8"
 
 # Update the urls once the hosting is set up.
 #[project.urls]
-#"Source" = "https://github.com/<username>/informalff/"
+"Source" = "https://github.com/zronyj/informalff/"
 #"Documentation" = "https://informalff.readthedocs.io/"
 
 [project.optional-dependencies]
